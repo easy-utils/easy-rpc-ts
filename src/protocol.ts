@@ -131,3 +131,13 @@ export interface ServiceDesc {
   typeName: string
   methods: MethodSpec[]
 }
+
+// ---- JSON helpers ----
+const enc = new TextEncoder()
+const dec = new TextDecoder()
+export function toBytes(v: unknown): Bytes {
+  return enc.encode(typeof v === 'string' ? v : JSON.stringify(v))
+}
+export function fromBytesToJson(b: Bytes): unknown {
+  return JSON.parse(dec.decode(b))
+}
