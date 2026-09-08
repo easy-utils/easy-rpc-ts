@@ -1,7 +1,7 @@
 // node bridge using built-in http2 (h2c/h2 via node:http2) or the fetch global
 // on Node 18+. Adapts to the Transport interface.
-import type { Request, Response, Stream, Transport } from './protocol'
-import { readFrames } from './protocol'
+import type { Request, Response, Stream, Transport } from './protocol.js'
+import { readFrames } from './protocol.js'
 
 /** Build a Node http2-based Transport (cleartext h2c / ALPN h2). */
 export function createNodeTransport(): Transport {

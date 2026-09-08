@@ -4,7 +4,7 @@ import { createConformanceServiceClient } from '../src/easyrpc/conformance/v1/co
 import { create } from '@bufbuild/protobuf'
 import { EchoRequestSchema, EchoResponseSchema, CountRequestSchema } from '../src/easyrpc/conformance/v1/conformance_pb'
 
-const base = 'http://127.0.0.1:18888'
+const base = process.env.EASY_RPC_BASE ?? 'http://127.0.0.1:18888'
 
 describe('TS -> Go interop', () => {
   it('echo unary proto', async () => {

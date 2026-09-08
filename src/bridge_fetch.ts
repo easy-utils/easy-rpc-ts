@@ -1,6 +1,6 @@
 // fetch bridge for browsers. Adapts window.fetch to the Transport interface.
-import type { Request, Response, Stream, Transport } from './protocol'
-import { readFrames } from './protocol'
+import type { Request, Response, Stream, Transport } from './protocol.js'
+import { readFrames } from './protocol.js'
 
 /** Build a fetch-based Transport. */
 export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch): Transport {

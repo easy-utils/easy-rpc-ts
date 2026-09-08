@@ -1,4 +1,4 @@
-export * from './protocol'
-export { createFetchTransport } from './bridge_fetch'
-export { createNodeTransport } from './bridge_node'
-export * from './server'
+export * from './protocol.js'
+export { createFetchTransport } from './bridge_fetch.js'
+export { createNodeTransport } from './bridge_node.js'
+export * from './server.js'
