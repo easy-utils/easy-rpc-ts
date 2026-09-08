@@ -1,0 +1,39 @@
+{
+  "name": "@easy-utils/easy-rpc",
+  "version": "0.1.0",
+  "description": "Zero-runtime-bindings easy-rpc core for TypeScript (Connect wire: unary + server-stream).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./fetch": {
+      "types": "./dist/bridge_fetch.d.ts",
+      "default": "./dist/bridge_fetch.js"
+    },
+    "./node": {
+      "types": "./dist/bridge_node.d.ts",
+      "default": "./dist/bridge_node.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "license": "Apache-2.0"
+}
