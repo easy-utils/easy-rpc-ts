@@ -5,9 +5,9 @@ import { HealthRequest, HealthResponse, EchoRequest, EchoResponse, CountRequest,
 
 export const methodSpecs: MethodSpec[] = [
   { service: "easyrpc.conformance.v1.ConformanceService", name: "Health", path: "/v1/health", httpMethod: "GET", clientStream: false, serverStream: false, body: "" },
-  { service: "easyrpc.conformance.v1.ConformanceService", name: "Echo", path: "/easyrpc.conformance.v1.ConformanceService/Echo", httpMethod: "POST", clientStream: false, serverStream: false, body: "" },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "Echo", path: "/v1/echo", httpMethod: "POST", clientStream: false, serverStream: false, body: "*" },
   { service: "easyrpc.conformance.v1.ConformanceService", name: "Count", path: "/v1/count", httpMethod: "POST", clientStream: false, serverStream: true, body: "*" },
-  { service: "easyrpc.conformance.v1.ConformanceService", name: "Fail", path: "/easyrpc.conformance.v1.ConformanceService/Fail", httpMethod: "POST", clientStream: false, serverStream: false, body: "" },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "Fail", path: "/v1/fail", httpMethod: "POST", clientStream: false, serverStream: false, body: "*" },
 ]
 
 export interface ConformanceServiceClient {
@@ -26,7 +26,7 @@ export function createConformanceServiceClient(transport: Transport): Conformanc
       return fromBinary(HealthResponseSchema, res.body)
     },
     async echo(req) {
-      const url = "/easyrpc.conformance.v1.ConformanceService/Echo"
+      const url = "/v1/echo"
       const res = await transport.send({ url, method: "POST", headers: { 'content-type': ['application/proto'] }, body: toBinary(EchoRequestSchema, req) })
       if (res.error) throw res.error
       return fromBinary(EchoResponseSchema, res.body)
@@ -41,7 +41,7 @@ export function createConformanceServiceClient(transport: Transport): Conformanc
       })()
     },
     async fail(req) {
-      const url = "/easyrpc.conformance.v1.ConformanceService/Fail"
+      const url = "/v1/fail"
       const res = await transport.send({ url, method: "POST", headers: { 'content-type': ['application/proto'] }, body: toBinary(FailRequestSchema, req) })
       if (res.error) throw res.error
       return fromBinary(FailResponseSchema, res.body)

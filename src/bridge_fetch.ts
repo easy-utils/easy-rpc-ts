@@ -3,10 +3,11 @@ import type { Request, Response, Stream, Transport } from './protocol'
 import { readFrames } from './protocol'
 
 /** Build a fetch-based Transport. */
-export function createFetchTransport(fetchFn: typeof fetch = fetch): Transport {
+export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch): Transport {
+  const join = (u: string) => (baseUrl ? baseUrl.replace(/\/+$/, '') + u : u)
   return {
     async send(req: Request): Promise<Response> {
-      const res = await fetchFn(req.url, {
+      const res = await fetchFn(join(req.url), {
         method: req.method,
         headers: headersToFetch(req.headers),
         body: req.body as unknown as BodyInit | undefined,
@@ -15,7 +16,7 @@ export function createFetchTransport(fetchFn: typeof fetch = fetch): Transport {
       return { status: res.status, headers: fromFetchHeaders(res.headers), body }
     },
     async openStream(req: Request): Promise<Stream> {
-      const res = await fetchFn(req.url, {
+      const res = await fetchFn(join(req.url), {
         method: req.method,
         headers: headersToFetch(req.headers),
         body: req.body as unknown as BodyInit | undefined,
