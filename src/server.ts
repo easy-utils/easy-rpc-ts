@@ -1,7 +1,6 @@
 // easy-rpc TS server core + JSON/proto content negotiation.
 import type { Bytes, Headers, Request, Response } from './protocol.js'
 import { httpStatus, RPCError, frame, withMetadata } from './protocol.js'
-import nodeHttp from 'node:http'
 import nodeHttp2 from 'node:http2'
 
 export type ContentKind = 'proto' | 'json'
@@ -53,21 +52,10 @@ export function concat(chunks: Bytes[]): Bytes {
   return out
 }
 
-export type NodeListener = ReturnType<typeof nodeHttp.createServer>
-
-export function nodeServer(handler: ServerHandler): NodeListener {
-  return nodeHttp.createServer(async (req, res) => {
-    const body = await readBody(req)
-    const headers: Headers = {}
-    for (const [k, v] of Object.entries(req.headers)) headers[k] = Array.isArray(v) ? v as string[] : [v as string]
-    const out = await handler({ url: req.url ?? '/', method: req.method ?? 'GET', headers, body })
-    res.writeHead(out.status, toNodeHeaders(out.headers))
-    res.end(out.body)
-  })
-}
-
 /** HTTP/2 server bridge (cleartext h2c + optional TLS h2) for server-to-server
- * RPC. It speaks the same Connect wire as nodeServer but over http2. */
+ * RPC. It speaks the same Connect wire as the pure app, but over http2.
+ * This is the only Node-native server adapter kept; for h1 use toWebHandler
+ * with any fetch-compatible runtime (Hono / Bun / CF Workers / Deno). */
 export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.Http2Server | nodeHttp2.Http2SecureServer {
   const server = secure
     ? nodeHttp2.createSecureServer({})
@@ -88,12 +76,6 @@ export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.H
   return server
 }
 
-function readBody(req: import('node:http').IncomingMessage): Promise<Bytes> {
-  return new Promise(resolve => { const a: Uint8Array[] = []; req.on('data', c => a.push(c)); req.on('end', () => resolve(concat(a as unknown as Bytes[]))) })
-}
-
 function readHttp2Body(stream: nodeHttp2.ServerHttp2Stream): Promise<Bytes> {
   return new Promise(resolve => { const a: Uint8Array[] = []; stream.on('data', c => a.push(c as Uint8Array)); stream.on('end', () => resolve(concat(a as unknown as Bytes[]))) })
 }
-
-function toNodeHeaders(h: Headers): Record<string, string> { const o: Record<string,string> = {}; for (const [k,v] of Object.entries(h)) o[k] = v.join(','); return o }
