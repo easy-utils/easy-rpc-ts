@@ -1,7 +1,8 @@
 // easy-rpc TS server core + JSON/proto content negotiation.
 import type { Bytes, Headers, Request, Response } from './protocol.js'
-import { httpStatus, RPCError, frame } from './protocol.js'
+import { httpStatus, RPCError, frame, withMetadata } from './protocol.js'
 import nodeHttp from 'node:http'
+import nodeHttp2 from 'node:http2'
 
 export type ContentKind = 'proto' | 'json'
 
@@ -65,7 +66,34 @@ export function nodeServer(handler: ServerHandler): NodeListener {
   })
 }
 
+/** HTTP/2 server bridge (cleartext h2c + optional TLS h2) for server-to-server
+ * RPC. It speaks the same Connect wire as nodeServer but over http2. */
+export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.Http2Server | nodeHttp2.Http2SecureServer {
+  const server = secure
+    ? nodeHttp2.createSecureServer({})
+    : nodeHttp2.createServer()
+  server.on('stream', async (stream, headers) => {
+    const body = await readHttp2Body(stream as nodeHttp2.ServerHttp2Stream)
+    const h: Headers = {}
+    for (const [k, v] of Object.entries(headers)) {
+      if (k.startsWith(':')) continue
+      h[k] = Array.isArray(v) ? v as string[] : [v as string]
+    }
+    const method = String(headers[':method'] ?? 'GET')
+    const url = String(headers[':path'] ?? '/')
+    const out = await handler({ url, method, headers: h, body })
+    ;(stream as nodeHttp2.ServerHttp2Stream).respond({ ':status': out.status, 'content-type': out.headers['content-type']?.[0] ?? 'application/proto' })
+    stream.end(out.body)
+  })
+  return server
+}
+
 function readBody(req: import('node:http').IncomingMessage): Promise<Bytes> {
   return new Promise(resolve => { const a: Uint8Array[] = []; req.on('data', c => a.push(c)); req.on('end', () => resolve(concat(a as unknown as Bytes[]))) })
 }
+
+function readHttp2Body(stream: nodeHttp2.ServerHttp2Stream): Promise<Bytes> {
+  return new Promise(resolve => { const a: Uint8Array[] = []; stream.on('data', c => a.push(c as Uint8Array)); stream.on('end', () => resolve(concat(a as unknown as Bytes[]))) })
+}
+
 function toNodeHeaders(h: Headers): Record<string, string> { const o: Record<string,string> = {}; for (const [k,v] of Object.entries(h)) o[k] = v.join(','); return o }

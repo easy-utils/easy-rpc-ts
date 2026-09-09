@@ -5,11 +5,16 @@ import { readFrames } from './protocol.js'
 /** Build a fetch-based Transport. */
 export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch): Transport {
   const join = (u: string) => (baseUrl ? baseUrl.replace(/\/+$/, '') + u : u)
+  const sendHeaders = (h: Request['headers']): Record<string, string> => {
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(h)) out[k] = v.join(',')
+    return out
+  }
   return {
     async send(req: Request): Promise<Response> {
       const res = await fetchFn(join(req.url), {
         method: req.method,
-        headers: headersToFetch(req.headers),
+        headers: sendHeaders(req.headers),
         body: req.body as unknown as BodyInit | undefined,
       })
       const body = new Uint8Array(await res.arrayBuffer())
@@ -18,7 +23,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
     async openStream(req: Request): Promise<Stream> {
       const res = await fetchFn(join(req.url), {
         method: req.method,
-        headers: headersToFetch(req.headers),
+        headers: sendHeaders(req.headers),
         body: req.body as unknown as BodyInit | undefined,
       })
       if (!res.body) return { async *[Symbol.asyncIterator]() {}, cancel() {} }

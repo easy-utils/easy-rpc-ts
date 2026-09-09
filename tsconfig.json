@@ -13,7 +13,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "types": ["node"],
-    "paths": { "easy-rpc/protocol": ["./src/protocol"] }
+    "paths": { "easy-rpc/protocol": ["./src/protocol"], "easy-rpc/server": ["./src/server"] }
   },
   "include": ["src"]
 }

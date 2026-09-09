@@ -1,114 +1,182 @@
-// node bridge using built-in http2 (h2c/h2 via node:http2) or the fetch global
-// on Node 18+. Adapts to the Transport interface.
-import type { Request, Response, Stream, Transport } from './protocol.js'
-import { readFrames } from './protocol.js'
+// node bridge using the built-in http2 module. It implements the Transport
+// interface for server-to-server RPC:
+//   - cleartext (http://)  -> h2c prior-knowledge
+//   - with ALPN or explicit http2 -> h2
+//   - falls back to HTTP/1.1 when the endpoint only speaks h1.
+// Bridge-only: the protocol logic (frames, headers, content-type) stays in core.
+import type { Request, Response, Stream, Transport, Headers as HeadersT } from './protocol.js'
+import { readFrames, RPCError } from './protocol.js'
+import http2 from 'node:http2'
+import http from 'node:http'
 
-/** Build a Node http2-based Transport (cleartext h2c / ALPN h2). */
-export function createNodeTransport(): Transport {
-  // Node >=18 has undici fetch which supports h2 via ALPN but cleartext h2c is
-  // limited. For robustness we use http2.connect for both.
-  const { connect } = nodeHttp2()
+/** Options controlling h2/h2c/h1 negotiation for the node bridge. */
+export interface NodeTransportOptions {
+  /** Preferred protocol. 'h2' uses http2.connect (h2c for http://, h2 for https://).
+   *  'auto' also falls back to http/1.1 if h2 handshake/connect fails. */
+  protocol?: 'h2' | 'h2c' | 'h1' | 'auto'
+  /** Agent for http/1.1 fallback (optional). */
+  httpAgent?: http.Agent
+  /** Base URL (e.g. http://localhost:8080) to join relative RPC paths. */
+  base?: string
+}
+
+function join(base: string | undefined, u: string): string {
+  if (u.startsWith('http://') || u.startsWith('https://')) return u
+  return (base ? base.replace(/\/+$/, '') : '') + (u.startsWith('/') ? u : '/' + u)
+}
+
+/** Build a Node http2-based Transport. */
+export function createNodeTransport(opts: NodeTransportOptions = {}): Transport {
+  const protocol = opts.protocol ?? 'h2'
+
+  // HTTP/2 cleartext (h2c, http:// URL) or secure (h2, https:// URL).
+  function connect(url: string): http2.ClientHttp2Session {
+    const target = join(opts.base, url)
+    const u = new URL(target.startsWith('http') ? target : 'http://' + target)
+    const session = http2.connect(u.protocol === 'https:' ? u.href : `http://${u.host}`)
+    session.on('error', () => { /* surfaced via stream error */ })
+    return session
+  }
+
+  async function doSend(req: Request): Promise<Response> {
+    const session = connect(req.url)
+    const stream = session.request(headersFor(req, false, opts.base))
+    const chunks: Uint8Array[] = []
+    const status = await new Promise<number>((resolve, reject) => {
+      stream.on('response', (headers: http2.IncomingHttpHeaders) => {
+        if (Number(headers[':status'] ?? 200) >= 300) {
+          reject(new RPCError(13, 'http error'))
+        }
+      })
+      stream.on('data', (c: Uint8Array) => chunks.push(c))
+      stream.on('end', () => resolve(200))
+      stream.on('error', reject)
+      stream.end(req.body ?? new Uint8Array(0))
+    })
+    session.close()
+    return { status, headers: {}, body: concatAll(chunks) }
+  }
+
+  function doOpenStream(req: Request): Promise<Stream> {
+    const session = connect(req.url)
+    const stream = session.request(headersFor(req, true, opts.base))
+    stream.end(req.body ?? new Uint8Array(0))
+    const chunks = (async function* () {
+      for await (const c of stream) yield c as Uint8Array
+    })()
+    const framed = readFrames(chunks)
+    return Promise.resolve({
+      async *[Symbol.asyncIterator]() {
+        for await (const f of framed) {
+          if (f.end) return
+          yield f.payload
+        }
+      },
+      cancel() {
+        try { stream.close(); session.close() } catch { /* noop */ }
+      },
+    })
+  }
+
+  // HTTP/1.1 fallback (used when 'auto' or explicit 'h1').
+  const h1Transport: Transport = createHttp1Transport(opts.httpAgent)
+
   return {
     async send(req: Request): Promise<Response> {
-      const res = await requestOnce(req, connect)
-      return res
+      if (protocol === 'h1') return h1Transport.send(req)
+      try {
+        return await doSend(req)
+      } catch (e) {
+        if (protocol === 'auto') return h1Transport.send(req)
+        throw e
+      }
     },
     async openStream(req: Request): Promise<Stream> {
-      const session = connect(req.url)
-      const stream = session.request(headersFor(req))
-      const chunks = (async function* () {
-        stream.on('data', (c: Uint8Array) => (push as any)(c))
-        stream.on('end', () => (push as any)(null))
-      })()
-      // We drive it manually with a queue.
-      const queue: Uint8Array[] = []
-      let done = false
-      const waiters: ((v: Uint8Array | null) => void)[] = []
-      const push = (v: Uint8Array | null) => {
-        if (v === null) {
-          done = true
-        } else {
-          queue.push(v)
-        }
-        const w = waiters.shift()
-        if (w) w(done ? null : queue.shift() ?? null)
+      if (protocol === 'h1') return h1Transport.openStream(req)
+      try {
+        return await doOpenStream(req)
+      } catch (e) {
+        if (protocol === 'auto') return h1Transport.openStream(req)
+        throw e
       }
-      stream.on('data', (c: Uint8Array) => push(c))
-      stream.on('end', () => push(null))
-      stream.on('error', () => push(null))
-      stream.end(req.body ?? new Uint8Array(0))
+    },
+  }
+}
 
-      const source: AsyncIterable<Uint8Array> = (async function* () {
-        // read top-level http2 stream 'data' chunks by subscribing push
-        // A simpler approach: re-read stream as async iterable is not direct.
-        yield* nodeStreamToAsync(stream)
+/** HTTP/1.1 fallback bridge (plain node:http). Used for 'h1' and 'auto'. */
+export function createHttp1Transport(agent?: http.Agent, base = ''): Transport {
+  return {
+    async send(req: Request): Promise<Response> {
+      const res = await httpRequest(req, agent, base)
+      const headers: HeadersT = {}
+      for (const [k, v] of Object.entries(res.headers)) headers[k] = [v]
+      return { status: res.status, headers, body: res.body }
+    },
+    async openStream(req: Request): Promise<Stream> {
+      const res = await httpRequest(req, agent, base)
+      const source = (async function* () {
+        for await (const c of res.raw) yield c
       })()
-
       const framed = readFrames(source)
-      const streamObj: Stream = {
+      return {
         async *[Symbol.asyncIterator]() {
           for await (const f of framed) {
             if (f.end) return
             yield f.payload
           }
         },
-        cancel() {
-          try { session.close() } catch { /* noop */ }
-        },
+        cancel() { /* http1 closes on end */ },
       }
-      return streamObj
     },
   }
 }
 
-function nodeStreamToAsync(stream: any): AsyncGenerator<Uint8Array> {
-  // Build an async queue from events.
-  const queue: Uint8Array[] = []
-  let done = false
-  let error: unknown
-  const waiters: ((v: IteratorResult<Uint8Array>) => void)[] = []
-  const wake = () => {
-    while (waiters.length) {
-      const w = waiters.shift()!
-      if (error) { w({ done: true, value: undefined as any }); continue }
-      if (queue.length) { w({ done: false, value: queue.shift()! }); continue }
-      if (done) { w({ done: true, value: undefined as any }); continue }
-      break
-    }
-  }
-  stream.on('data', (c: Uint8Array) => { queue.push(c); wake() })
-  stream.on('end', () => { done = true; wake() })
-  stream.on('error', (e: unknown) => { error = e; done = true; wake() })
-  return (async function* () {
-    for (;;) {
-      if (queue.length) yield queue.shift()!
-      else if (done) return
-      else await new Promise<void>((resolve) => {
-        waiters.push((r) => { void r; resolve() })
+function httpRequest(req: Request, agent?: http.Agent, base = ''): Promise<{ status: number; headers: Record<string, string>; body: Uint8Array; raw: AsyncIterable<Uint8Array> }> {
+  const u = new URL(join(base, req.url))
+  return new Promise((resolve, reject) => {
+    const preq = http.request({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      method: req.method,
+      headers: headersToRecord(req.headers),
+      agent,
+    }, (resp) => {
+      const chunks: Uint8Array[] = []
+      const raw: AsyncIterable<Uint8Array> = (async function* () {
+        for await (const c of resp) yield c as Uint8Array
+      })()
+      resp.on('data', (c: Uint8Array) => chunks.push(c))
+      resp.on('end', () => {
+        resolve({
+          status: resp.statusCode ?? 0,
+          headers: resp.headers as Record<string, string>,
+          body: concatAll(chunks),
+          raw,
+        })
       })
-    }
-  })()
-}
-
-async function requestOnce(req: Request, connect: any): Promise<Response> {
-  const session = connect(req.url)
-  const stream = session.request(headersFor(req))
-  const chunks: Uint8Array[] = []
-  await new Promise<void>((resolve, reject) => {
-    stream.on('data', (c: Uint8Array) => chunks.push(c))
-    stream.on('end', resolve)
-    stream.on('error', reject)
-    stream.end(req.body ?? new Uint8Array(0))
+    })
+    preq.on('error', reject)
+    preq.end(req.body ?? new Uint8Array(0))
   })
-  session.close()
-  return { status: 200, headers: {}, body: concatAll(chunks) }
 }
 
-function headersFor(req: Request): Record<string, string> {
+function headersFor(req: Request, stream: boolean, base = ''): http2.OutgoingHttpHeaders {
+  const out: Record<string, string | string[]> = { ':method': req.method }
+  const u = new URL(join(base, req.url))
+  out[':path'] = u.pathname + u.search
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (k.startsWith(':')) continue
+    out[k] = v.length === 1 ? v[0] : v
+  }
+  if (!out['content-type']) out['content-type'] = stream ? 'application/connect+proto' : 'application/proto'
+  if (!out['accept']) out['accept'] = stream ? 'application/connect+proto' : 'application/proto'
+  return out
+}
+
+function headersToRecord(h: Request['headers']): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(req.headers)) out[k] = v.join(',')
-  out[':method'] = req.method
-  out[':path'] = new URL(req.url).pathname + new URL(req.url).search
+  for (const [k, v] of Object.entries(h)) out[k] = v.join(',')
   return out
 }
 
@@ -118,9 +186,4 @@ function concatAll(chunks: Uint8Array[]): Uint8Array {
   let off = 0
   for (const c of chunks) { out.set(c, off); off += c.length }
   return out
-}
-
-function nodeHttp2() {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  return require('node:http2') as { connect: any }
 }

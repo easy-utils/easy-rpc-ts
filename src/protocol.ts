@@ -6,6 +6,26 @@
 export type Bytes = Uint8Array<ArrayBufferLike>
 export type Headers = Record<string, string[]>
 
+/** Merge fixed metadata headers into a request's headers (auth/tenant/token).
+ * Call-provided values win; this is the documented way to attach credentials. */
+export function withMetadata(metadata: Headers, req: Request): Request {
+  const merged: Headers = { ...(metadata ?? {}) }
+  for (const [k, v] of Object.entries(req.headers)) merged[k] = v
+  return { ...req, headers: merged }
+}
+
+/** MetadataTransport decorates a Transport with fixed metadata headers. */
+export function createMetadataTransport(metadata: Headers, transport: Transport): Transport {
+  return {
+    async send(req: Request): Promise<Response> {
+      return transport.send(withMetadata(metadata, req))
+    },
+    async openStream(req: Request): Promise<Stream> {
+      return transport.openStream(withMetadata(metadata, req))
+    },
+  }
+}
+
 /** A normalized RPC request. */
 export interface Request {
   url: string
