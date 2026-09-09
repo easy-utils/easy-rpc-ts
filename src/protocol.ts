@@ -65,12 +65,19 @@ export interface Transport {
 /** Maps Connect code to HTTP status. */
 export function httpStatus(code: number): number {
   switch (code) {
+    case 1: return 499
     case 3: return 400
+    case 4: return 504
     case 5: return 404
+    case 6: return 409
     case 7: return 403
     case 8: return 429
-    case 16: return 401
+    case 9: return 400
+    case 10: return 409
+    case 11: return 400
+    case 12: return 501
     case 14: return 503
+    case 16: return 401
     default: return 500
   }
 }
@@ -83,6 +90,10 @@ function connectFromStatus(status: number): number {
     case 401: return 16
     case 429: return 8
     case 503: return 14
+    case 409: return 10
+    case 504: return 4
+    case 501: return 12
+    case 499: return 1
     default: return 13
   }
 }
