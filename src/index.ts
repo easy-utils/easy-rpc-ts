@@ -1,5 +1,6 @@
 export * from './protocol.js'
 export { createFetchTransport } from './bridge_fetch.js'
 export { createNodeTransport, createHttp1Transport } from './bridge_node.js'
+export { createDefaultTransport } from './bridge_client.js'
 export { createMetadataTransport } from './protocol.js'
 export * from './server.js'
