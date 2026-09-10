@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./server": {
+      "types": "./dist/server_entry.d.ts",
+      "default": "./dist/server_entry.js"
+    },
     "./fetch": {
       "types": "./dist/bridge_fetch.d.ts",
       "default": "./dist/bridge_fetch.js"

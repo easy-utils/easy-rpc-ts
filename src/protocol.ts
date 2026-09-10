@@ -172,3 +172,18 @@ export function toBytes(v: unknown): Bytes {
 export function fromBytesToJson(b: Bytes): unknown {
   return JSON.parse(dec.decode(b))
 }
+
+// ---- content negotiation (shared by client + server; no runtime deps) ----
+export type ContentKind = 'proto' | 'json'
+
+export interface ServiceHandlers {
+  unary: Record<string, (input: Bytes, kind: ContentKind) => Promise<Bytes>>
+  stream: Record<string, (input: Bytes, kind: ContentKind, emit: (data: Bytes, end: boolean) => Promise<void>) => Promise<void>>
+}
+
+export function detectKind(req: Request): ContentKind {
+  const ct = req.headers['content-type']?.[0] ?? ''
+  const ac = req.headers['accept']?.[0] ?? ''
+  if (ct.startsWith('application/json') || ac.startsWith('application/json')) return 'json'
+  return 'proto'
+}

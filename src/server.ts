@@ -1,23 +1,16 @@
-// easy-rpc TS server core + JSON/proto content negotiation.
+// easy-rpc TS server core: ASGI-style dispatch + JSON/proto content
+// negotiation. This module is server-only and may import Node built-ins; the
+// client entry (index.ts) does NOT re-export it.
 import type { Bytes, Headers, Request, Response } from './protocol.js'
-import { httpStatus, RPCError, frame, withMetadata } from './protocol.js'
+import { httpStatus, RPCError, frame } from './protocol.js'
+import { type ContentKind, type ServiceHandlers, detectKind } from './protocol.js'
 import nodeHttp2 from 'node:http2'
 
-export type ContentKind = 'proto' | 'json'
+export type { ContentKind, ServiceHandlers } from './protocol.js'
+export { detectKind } from './protocol.js'
 
 export interface MethodSpec2 { path: string; name: string; serverStream: boolean }
 
-export interface ServiceHandlers {
-  unary: Record<string, (input: Bytes, kind: ContentKind) => Promise<Bytes>>
-  stream: Record<string, (input: Bytes, kind: ContentKind, emit: (data: Bytes, end: boolean) => Promise<void>) => Promise<void>>
-}
-
-export function detectKind(req: Request): ContentKind {
-  const ct = req.headers['content-type']?.[0] ?? ''
-  const ac = req.headers['accept']?.[0] ?? ''
-  if (ct.startsWith('application/json') || ac.startsWith('application/json')) return 'json'
-  return 'proto'
-}
 function contentFor(kind: ContentKind): string { return kind === 'json' ? 'application/json' : 'application/proto' }
 function streamContentFor(kind: ContentKind): string { return kind === 'json' ? 'application/connect+json' : 'application/connect+proto' }
 
