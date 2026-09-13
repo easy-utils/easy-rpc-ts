@@ -123,7 +123,7 @@ export async function* readFrames(
     acc = concat(acc, c)
     for (;;) {
       if (acc.length < 5) break
-      const flags = acc[0]
+      const flags = acc[0] ?? 0
       const len = new DataView(acc.buffer, acc.byteOffset, acc.byteLength).getUint32(1, false)
       if (len > 64 * 1024 * 1024) throw new RPCError(13, 'frame too large')
       if (acc.length < 5 + len) break

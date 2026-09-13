@@ -167,7 +167,7 @@ function headersFor(req: Request, stream: boolean, base = ''): http2.OutgoingHtt
   out[':path'] = u.pathname + u.search
   for (const [k, v] of Object.entries(req.headers)) {
     if (k.startsWith(':')) continue
-    out[k] = v.length === 1 ? v[0] : v
+    out[k] = v.length === 1 ? (v[0] ?? '') : v
   }
   if (!out['content-type']) out['content-type'] = stream ? 'application/connect+proto' : 'application/proto'
   if (!out['accept']) out['accept'] = stream ? 'application/connect+proto' : 'application/proto'
