@@ -3,28 +3,28 @@
   "version": "0.1.0",
   "description": "Zero-runtime-bindings easy-rpc core for TypeScript (Connect wire: unary + server-stream).",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./server": {
-      "types": "./dist/server_entry.d.ts",
-      "default": "./dist/server_entry.js"
+      "types": "./src/server_entry.ts",
+      "default": "./src/server_entry.ts"
     },
     "./fetch": {
-      "types": "./dist/bridge_fetch.d.ts",
-      "default": "./dist/bridge_fetch.js"
+      "types": "./src/bridge_fetch.ts",
+      "default": "./src/bridge_fetch.ts"
     },
     "./node": {
-      "types": "./dist/bridge_node.d.ts",
-      "default": "./dist/bridge_node.js"
+      "types": "./src/bridge_node.ts",
+      "default": "./src/bridge_node.ts"
     }
   },
   "files": [
-    "dist"
+    "src"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
