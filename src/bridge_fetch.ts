@@ -15,7 +15,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
       const res = await fetchFn(join(req.url), {
         method: req.method,
         headers: sendHeaders(req.headers),
-        body: req.body as unknown as BodyInit | undefined,
+        body: req.body as unknown as BodyInit | null,
       })
       const body = new Uint8Array(await res.arrayBuffer())
       return { status: res.status, headers: fromFetchHeaders(res.headers), body }
@@ -24,7 +24,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
       const res = await fetchFn(join(req.url), {
         method: req.method,
         headers: sendHeaders(req.headers),
-        body: req.body as unknown as BodyInit | undefined,
+        body: req.body as unknown as BodyInit | null,
       })
       if (!res.body) return { async *[Symbol.asyncIterator]() {}, cancel() {} }
       const reader = res.body.getReader()
