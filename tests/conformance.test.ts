@@ -47,7 +47,7 @@ describe('conformance cross-lang', () => {
     const server = makeServer()
     await new Promise(r => server.listen(0, r))
     const port = server.address().port
-    const t = createFetchTransport(fetch)
+    const t = createFetchTransport()
     const res = await t.send({
       url: `http://127.0.0.1:${port}/easyrpc.conformance.v1.ConformanceService/Echo`,
       method: 'POST',
@@ -63,7 +63,7 @@ describe('conformance cross-lang', () => {
     const server = makeServer()
     await new Promise(r => server.listen(0, r))
     const port = server.address().port
-    const t = createFetchTransport(fetch)
+    const t = createFetchTransport()
     const stream = await t.openStream({
       url: `http://127.0.0.1:${port}/easyrpc.conformance.v1.ConformanceService/Count`,
       method: 'POST',
