@@ -181,9 +181,55 @@ export interface ServiceHandlers {
   stream: Record<string, (input: Bytes, kind: ContentKind, emit: (data: Bytes, end: boolean) => Promise<void>) => Promise<void>>
 }
 
+/**
+ * Server-side response sink. The dispatch core PUSHES bytes into a writer
+ * instead of returning a buffered body, so server-stream responses are written
+ * frame-by-frame and flushed by the runtime adapter (node:http, node:http2,
+ * fetch/Web, ...) as they are produced. This is the whole point of the easy-rpc
+ * server model: never buffer a stream.
+ *
+ * Connect semantics: a server-stream response is always HTTP 200; a failure is
+ * carried in the END frame, never as an HTTP status. Unary responses are fully
+ * resolved before `status`/`write` are called, so a thrown error still surfaces
+ * as a real non-200 status (the core maps it before the first write).
+ */
+export interface ResponseWriter {
+  /** Set the HTTP status (called before the first `write`). */
+  status(code: number): void
+  /** Set a response header (called before the first `write`). */
+  header(name: string, value: string): void
+  /** Write raw response bytes (already framed for stream methods). */
+  write(chunk: Bytes): Promise<void>
+  /** Finish the response. */
+  finish(): Promise<void>
+}
+
+/** Server dispatch function: decodes the request, runs the handler, pushes the
+ *  response into the writer. */
+export type ServerDispatch = (req: Request, w: ResponseWriter) => Promise<void>
+
+/** Method shape the server dispatches on. */
+export interface ServerMethodSpec {
+  path: string
+  name: string
+  serverStream: boolean
+}
+
 export function detectKind(req: Request): ContentKind {
   const ct = req.headers['content-type']?.[0] ?? ''
   const ac = req.headers['accept']?.[0] ?? ''
   if (ct.startsWith('application/json') || ac.startsWith('application/json')) return 'json'
   return 'proto'
+}
+
+/** Encode an error into a stream END frame payload (`<code byte>\x00<message>`),
+ *  matching the Go/Rust/Python encoders. Clients that understand it surface the
+ *  error; clients that don't still see a clean END. */
+export function encodeEndStream(code: number, message: string): Bytes {
+  const msg = new TextEncoder().encode(message)
+  const out = new Uint8Array(2 + msg.length)
+  out[0] = code & 0xff
+  out[1] = 0
+  out.set(msg, 2)
+  return out
 }
