@@ -2,14 +2,17 @@
 import { fromBinary, toBinary, toJson, fromJson } from '@bufbuild/protobuf'
 import { toBytes, fromBytesToJson } from '../../../protocol.js'
 import type { Transport, MethodSpec, Headers } from '../../../protocol.js'
-import type { ServiceHandlers, ContentKind } from '../../../server.js'
-import { HealthRequest, HealthResponse, EchoRequest, EchoResponse, CountRequest, CountResponse, FailRequest, FailResponse, HealthRequestSchema, HealthResponseSchema, EchoRequestSchema, EchoResponseSchema, CountRequestSchema, CountResponseSchema, FailRequestSchema, FailResponseSchema } from './conformance_pb.js'
+import type { ServiceHandlers, ContentKind } from '../../../protocol.js'
+import { HealthRequest, HealthResponse, EchoRequest, EchoResponse, CountRequest, CountResponse, FailRequest, FailResponse, StreamFailRequest, StreamFailResponse, EchoMetaRequest, EchoMetaResponse, BigRequest, BigResponse, HealthRequestSchema, HealthResponseSchema, EchoRequestSchema, EchoResponseSchema, CountRequestSchema, CountResponseSchema, FailRequestSchema, FailResponseSchema, StreamFailRequestSchema, StreamFailResponseSchema, EchoMetaRequestSchema, EchoMetaResponseSchema, BigRequestSchema, BigResponseSchema } from './conformance_pb.js'
 
 export const methodSpecs: MethodSpec[] = [
   { service: "easyrpc.conformance.v1.ConformanceService", name: "Health", path: "/v1/health", httpMethod: "GET", clientStream: false, serverStream: false, body: "" },
   { service: "easyrpc.conformance.v1.ConformanceService", name: "Echo", path: "/v1/echo", httpMethod: "POST", clientStream: false, serverStream: false, body: "*" },
   { service: "easyrpc.conformance.v1.ConformanceService", name: "Count", path: "/v1/count", httpMethod: "POST", clientStream: false, serverStream: true, body: "*" },
   { service: "easyrpc.conformance.v1.ConformanceService", name: "Fail", path: "/v1/fail", httpMethod: "POST", clientStream: false, serverStream: false, body: "*" },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "StreamFail", path: "/v1/stream-fail", httpMethod: "POST", clientStream: false, serverStream: true, body: "*" },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "EchoMeta", path: "/v1/echo-meta", httpMethod: "POST", clientStream: false, serverStream: false, body: "*" },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "Big", path: "/v1/big", httpMethod: "POST", clientStream: false, serverStream: false, body: "*" },
 ]
 
 export interface ConformanceServiceClient {
@@ -17,6 +20,9 @@ export interface ConformanceServiceClient {
   echo(req: EchoRequest, kind?: ContentKind, metadata?: Headers): Promise<EchoResponse>
   count(req: CountRequest, kind?: ContentKind, metadata?: Headers): Promise<AsyncIterable<CountResponse>>
   fail(req: FailRequest, kind?: ContentKind, metadata?: Headers): Promise<FailResponse>
+  streamFail(req: StreamFailRequest, kind?: ContentKind, metadata?: Headers): Promise<AsyncIterable<StreamFailResponse>>
+  echoMeta(req: EchoMetaRequest, kind?: ContentKind, metadata?: Headers): Promise<EchoMetaResponse>
+  big(req: BigRequest, kind?: ContentKind, metadata?: Headers): Promise<BigResponse>
 }
 export function createConformanceServiceClient(transport: Transport, defaultKind: ContentKind = 'proto'): ConformanceServiceClient {
   return {
@@ -55,6 +61,32 @@ export function createConformanceServiceClient(transport: Transport, defaultKind
       if (res.error) throw res.error
       return isJson ? fromJson(FailResponseSchema, fromBytesToJson(res.body) as unknown as import('@bufbuild/protobuf').JsonValue) : fromBinary(FailResponseSchema, res.body)
     },
+    async streamFail(req, kind = defaultKind, metadata?: Headers) {
+      const url = "/v1/stream-fail"
+      const isJson = kind === 'json'
+      const ct = isJson ? 'application/connect+json' : 'application/connect+proto'
+      const md = { ...(metadata ?? {}), 'content-type': [ct], accept: [ct] }
+      const stream = await transport.openStream({ url, method: 'POST', headers: md, body: isJson ? toBytes(toJson(StreamFailRequestSchema, req)) : toBinary(StreamFailRequestSchema, req) })
+      return (async function* (): AsyncIterable<StreamFailResponse> { for await (const chunk of stream) { yield isJson ? fromJson(StreamFailResponseSchema, fromBytesToJson(chunk) as unknown as import('@bufbuild/protobuf').JsonValue) : fromBinary(StreamFailResponseSchema, chunk) } })()
+    },
+    async echoMeta(req, kind = defaultKind, metadata?: Headers) {
+      const url = "/v1/echo-meta"
+      const isJson = kind === 'json'
+      const ct = isJson ? 'application/json' : 'application/proto'
+      const md = { ...(metadata ?? {}), 'content-type': [ct], accept: [ct] }
+      const res = await transport.send({ url, method: "POST", headers: md, body: isJson ? toBytes(toJson(EchoMetaRequestSchema, req)) : toBinary(EchoMetaRequestSchema, req) })
+      if (res.error) throw res.error
+      return isJson ? fromJson(EchoMetaResponseSchema, fromBytesToJson(res.body) as unknown as import('@bufbuild/protobuf').JsonValue) : fromBinary(EchoMetaResponseSchema, res.body)
+    },
+    async big(req, kind = defaultKind, metadata?: Headers) {
+      const url = "/v1/big"
+      const isJson = kind === 'json'
+      const ct = isJson ? 'application/json' : 'application/proto'
+      const md = { ...(metadata ?? {}), 'content-type': [ct], accept: [ct] }
+      const res = await transport.send({ url, method: "POST", headers: md, body: isJson ? toBytes(toJson(BigRequestSchema, req)) : toBinary(BigRequestSchema, req) })
+      if (res.error) throw res.error
+      return isJson ? fromJson(BigResponseSchema, fromBytesToJson(res.body) as unknown as import('@bufbuild/protobuf').JsonValue) : fromBinary(BigResponseSchema, res.body)
+    },
   }
 }
 
@@ -63,6 +95,9 @@ export interface ConformanceServiceServiceImpl {
   echo(req: EchoRequest): Promise<EchoResponse>
   count(req: CountRequest): AsyncIterable<CountResponse>
   fail(req: FailRequest): Promise<FailResponse>
+  streamFail(req: StreamFailRequest): AsyncIterable<StreamFailResponse>
+  echoMeta(req: EchoMetaRequest): Promise<EchoMetaResponse>
+  big(req: BigRequest): Promise<BigResponse>
 }
 
 export function ConformanceServiceHandlers(impl: ConformanceServiceServiceImpl): ServiceHandlers {
@@ -88,5 +123,21 @@ export function ConformanceServiceHandlers(impl: ConformanceServiceServiceImpl):
     const v = await impl.fail(req)
     return kind==='json'?toBytes(toJson(FailResponseSchema, v)):toBinary(FailResponseSchema, v)
   }
+  stream["StreamFail"] = async (input, kind, emit) => {
+    const req = kind==='json'?fromJson(StreamFailRequestSchema, fromBytesToJson(input) as unknown as import('@bufbuild/protobuf').JsonValue):fromBinary(StreamFailRequestSchema, input)
+    for await (const v of await impl.streamFail(req)) { await emit(kind==='json'?toBytes(toJson(StreamFailResponseSchema, v)):toBinary(StreamFailResponseSchema, v), false) }
+    await emit(new Uint8Array(0), true)
+  }
+  unary["EchoMeta"] = async (input, kind) => {
+    const req = kind==='json'?fromJson(EchoMetaRequestSchema, fromBytesToJson(input) as unknown as import('@bufbuild/protobuf').JsonValue):fromBinary(EchoMetaRequestSchema, input)
+    const v = await impl.echoMeta(req)
+    return kind==='json'?toBytes(toJson(EchoMetaResponseSchema, v)):toBinary(EchoMetaResponseSchema, v)
+  }
+  unary["Big"] = async (input, kind) => {
+    const req = kind==='json'?fromJson(BigRequestSchema, fromBytesToJson(input) as unknown as import('@bufbuild/protobuf').JsonValue):fromBinary(BigRequestSchema, input)
+    const v = await impl.big(req)
+    return kind==='json'?toBytes(toJson(BigResponseSchema, v)):toBinary(BigResponseSchema, v)
+  }
   return { unary, stream }
 }
+

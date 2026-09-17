@@ -4,14 +4,14 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import { file_google_api_annotations } from "../../../google/api/annotations_pb.js";
+import { file_google_api_annotations } from "../../../google/api/annotations_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file easyrpc/conformance/v1/conformance.proto.
  */
 export const file_easyrpc_conformance_v1_conformance: GenFile = /*@__PURE__*/
-  fileDesc("CihlYXN5cnBjL2NvbmZvcm1hbmNlL3YxL2NvbmZvcm1hbmNlLnByb3RvEhZlYXN5cnBjLmNvbmZvcm1hbmNlLnYxIhwKC0VjaG9SZXF1ZXN0Eg0KBWlucHV0GAEgASgJIh4KDEVjaG9SZXNwb25zZRIOCgZvdXRwdXQYASABKAkiHQoMQ291bnRSZXF1ZXN0Eg0KBWNvdW50GAEgASgFIh4KDUNvdW50UmVzcG9uc2USDQoFaW5kZXgYASABKAUiHgoLRmFpbFJlcXVlc3QSDwoHbWVzc2FnZRgBIAEoCSIaCgxGYWlsUmVzcG9uc2USCgoCb2sYASABKAgiDwoNSGVhbHRoUmVxdWVzdCIqCg5IZWFsdGhSZXNwb25zZRIKCgJvaxgBIAEoCBIMCgRuYW1lGAIgASgJMr8DChJDb25mb3JtYW5jZVNlcnZpY2USawoGSGVhbHRoEiUuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5IZWFsdGhSZXF1ZXN0GiYuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5IZWFsdGhSZXNwb25zZSISgtPkkwIMEgovdjEvaGVhbHRoEmYKBEVjaG8SIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9SZXF1ZXN0GiQuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvUmVzcG9uc2UiE4LT5JMCDToBKiIIL3YxL2VjaG8SbAoFQ291bnQSJC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkNvdW50UmVxdWVzdBolLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRSZXNwb25zZSIUgtPkkwIOOgEqIgkvdjEvY291bnQwARJmCgRGYWlsEiMuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5GYWlsUmVxdWVzdBokLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRmFpbFJlc3BvbnNlIhOC0+STAg06ASoiCC92MS9mYWlsQkBaPmdpdGh1Yi5jb20vZWFzeS11dGlscy9lYXN5LXJwYy1nby9jb25mb3JtYW5jZS92MTtjb25mb3JtYW5jZXYxYgZwcm90bzM", [file_google_api_annotations]);
+  fileDesc("CihlYXN5cnBjL2NvbmZvcm1hbmNlL3YxL2NvbmZvcm1hbmNlLnByb3RvEhZlYXN5cnBjLmNvbmZvcm1hbmNlLnYxIhwKC0VjaG9SZXF1ZXN0Eg0KBWlucHV0GAEgASgJIh4KDEVjaG9SZXNwb25zZRIOCgZvdXRwdXQYASABKAkiHQoMQ291bnRSZXF1ZXN0Eg0KBWNvdW50GAEgASgFIh4KDUNvdW50UmVzcG9uc2USDQoFaW5kZXgYASABKAUiHgoLRmFpbFJlcXVlc3QSDwoHbWVzc2FnZRgBIAEoCSIaCgxGYWlsUmVzcG9uc2USCgoCb2sYASABKAgiDwoNSGVhbHRoUmVxdWVzdCIqCg5IZWFsdGhSZXNwb25zZRIKCgJvaxgBIAEoCBIMCgRuYW1lGAIgASgJIkcKEVN0cmVhbUZhaWxSZXF1ZXN0EhMKC2VtaXRfYmVmb3JlGAEgASgFEgwKBGNvZGUYAiABKAUSDwoHbWVzc2FnZRgDIAEoCSIjChJTdHJlYW1GYWlsUmVzcG9uc2USDQoFaW5kZXgYASABKAUiIAoPRWNob01ldGFSZXF1ZXN0Eg0KBWlucHV0GAEgASgJIpABChBFY2hvTWV0YVJlc3BvbnNlEg0KBWlucHV0GAEgASgJEkAKBG1ldGEYAiADKAsyMi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2UuTWV0YUVudHJ5GisKCU1ldGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhoKCkJpZ1JlcXVlc3QSDAoEc2l6ZRgBIAEoBSIbCgtCaWdSZXNwb25zZRIMCgRzaXplGAIgASgFMqAGChJDb25mb3JtYW5jZVNlcnZpY2USawoGSGVhbHRoEiUuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5IZWFsdGhSZXF1ZXN0GiYuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5IZWFsdGhSZXNwb25zZSISgtPkkwIMEgovdjEvaGVhbHRoEmYKBEVjaG8SIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9SZXF1ZXN0GiQuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvUmVzcG9uc2UiE4LT5JMCDSIIL3YxL2VjaG86ASoSbAoFQ291bnQSJC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkNvdW50UmVxdWVzdBolLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRSZXNwb25zZSIUgtPkkwIOIgkvdjEvY291bnQ6ASowARJmCgRGYWlsEiMuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5GYWlsUmVxdWVzdBokLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRmFpbFJlc3BvbnNlIhOC0+STAg0iCC92MS9mYWlsOgEqEoEBCgpTdHJlYW1GYWlsEikuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5TdHJlYW1GYWlsUmVxdWVzdBoqLmVhc3lycGMuY29uZm9ybWFuY2UudjEuU3RyZWFtRmFpbFJlc3BvbnNlIhqC0+STAhQiDy92MS9zdHJlYW0tZmFpbDoBKjABEncKCEVjaG9NZXRhEicuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvTWV0YVJlcXVlc3QaKC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2UiGILT5JMCEiINL3YxL2VjaG8tbWV0YToBKhJiCgNCaWcSIi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkJpZ1JlcXVlc3QaIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkJpZ1Jlc3BvbnNlIhKC0+STAgwiBy92MS9iaWc6ASpCQFo+Z2l0aHViLmNvbS9lYXN5LXV0aWxzL2Vhc3ktcnBjLWdvL2NvbmZvcm1hbmNlL3YxO2NvbmZvcm1hbmNldjFiBnByb3RvMw", [file_google_api_annotations]);
 
 /**
  * @generated from message easyrpc.conformance.v1.EchoRequest
@@ -151,6 +151,127 @@ export const HealthResponseSchema: GenMessage<HealthResponse> = /*@__PURE__*/
   messageDesc(file_easyrpc_conformance_v1_conformance, 7);
 
 /**
+ * @generated from message easyrpc.conformance.v1.StreamFailRequest
+ */
+export type StreamFailRequest = Message<"easyrpc.conformance.v1.StreamFailRequest"> & {
+  /**
+   * Emit this many data frames, then fail with `code`.
+   *
+   * @generated from field: int32 emit_before = 1;
+   */
+  emitBefore: number;
+
+  /**
+   * @generated from field: int32 code = 2;
+   */
+  code: number;
+
+  /**
+   * @generated from field: string message = 3;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.StreamFailRequest.
+ * Use `create(StreamFailRequestSchema)` to create a new message.
+ */
+export const StreamFailRequestSchema: GenMessage<StreamFailRequest> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 8);
+
+/**
+ * @generated from message easyrpc.conformance.v1.StreamFailResponse
+ */
+export type StreamFailResponse = Message<"easyrpc.conformance.v1.StreamFailResponse"> & {
+  /**
+   * @generated from field: int32 index = 1;
+   */
+  index: number;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.StreamFailResponse.
+ * Use `create(StreamFailResponseSchema)` to create a new message.
+ */
+export const StreamFailResponseSchema: GenMessage<StreamFailResponse> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 9);
+
+/**
+ * @generated from message easyrpc.conformance.v1.EchoMetaRequest
+ */
+export type EchoMetaRequest = Message<"easyrpc.conformance.v1.EchoMetaRequest"> & {
+  /**
+   * @generated from field: string input = 1;
+   */
+  input: string;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.EchoMetaRequest.
+ * Use `create(EchoMetaRequestSchema)` to create a new message.
+ */
+export const EchoMetaRequestSchema: GenMessage<EchoMetaRequest> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 10);
+
+/**
+ * @generated from message easyrpc.conformance.v1.EchoMetaResponse
+ */
+export type EchoMetaResponse = Message<"easyrpc.conformance.v1.EchoMetaResponse"> & {
+  /**
+   * @generated from field: string input = 1;
+   */
+  input: string;
+
+  /**
+   * mirrors selected request metadata
+   *
+   * @generated from field: map<string, string> meta = 2;
+   */
+  meta: { [key: string]: string };
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.EchoMetaResponse.
+ * Use `create(EchoMetaResponseSchema)` to create a new message.
+ */
+export const EchoMetaResponseSchema: GenMessage<EchoMetaResponse> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 11);
+
+/**
+ * @generated from message easyrpc.conformance.v1.BigRequest
+ */
+export type BigRequest = Message<"easyrpc.conformance.v1.BigRequest"> & {
+  /**
+   * @generated from field: int32 size = 1;
+   */
+  size: number;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.BigRequest.
+ * Use `create(BigRequestSchema)` to create a new message.
+ */
+export const BigRequestSchema: GenMessage<BigRequest> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 12);
+
+/**
+ * @generated from message easyrpc.conformance.v1.BigResponse
+ */
+export type BigResponse = Message<"easyrpc.conformance.v1.BigResponse"> & {
+  /**
+   * @generated from field: int32 size = 2;
+   */
+  size: number;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.BigResponse.
+ * Use `create(BigResponseSchema)` to create a new message.
+ */
+export const BigResponseSchema: GenMessage<BigResponse> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 13);
+
+/**
  * @generated from service easyrpc.conformance.v1.ConformanceService
  */
 export const ConformanceService: GenService<{
@@ -185,6 +306,36 @@ export const ConformanceService: GenService<{
     methodKind: "unary";
     input: typeof FailRequestSchema;
     output: typeof FailResponseSchema;
+  },
+  /**
+   * Emit N frames then end the stream with a Connect end-stream error.
+   *
+   * @generated from rpc easyrpc.conformance.v1.ConformanceService.StreamFail
+   */
+  streamFail: {
+    methodKind: "server_streaming";
+    input: typeof StreamFailRequestSchema;
+    output: typeof StreamFailResponseSchema;
+  },
+  /**
+   * Echo selected request metadata back in the response.
+   *
+   * @generated from rpc easyrpc.conformance.v1.ConformanceService.EchoMeta
+   */
+  echoMeta: {
+    methodKind: "unary";
+    input: typeof EchoMetaRequestSchema;
+    output: typeof EchoMetaResponseSchema;
+  },
+  /**
+   * Return `size` bytes to exercise max-message behavior.
+   *
+   * @generated from rpc easyrpc.conformance.v1.ConformanceService.Big
+   */
+  big: {
+    methodKind: "unary";
+    input: typeof BigRequestSchema;
+    output: typeof BigResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_easyrpc_conformance_v1_conformance, 0);
