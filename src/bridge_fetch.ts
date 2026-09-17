@@ -1,6 +1,6 @@
 // fetch bridge for browsers. Adapts window.fetch to the Transport interface.
 import type { Request, Response, Stream, Transport } from './protocol.js'
-import { readFrames } from './protocol.js'
+import { readFrames, streamPayloads } from './protocol.js'
 
 /** Build a fetch-based Transport. */
 export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch): Transport {
@@ -39,10 +39,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
       const framed = readFrames(source)
       return {
         async *[Symbol.asyncIterator]() {
-          for await (const f of framed) {
-            if (f.end) return
-            yield f.payload
-          }
+          yield* streamPayloads(framed)
         },
         cancel() {
           void reader.cancel()

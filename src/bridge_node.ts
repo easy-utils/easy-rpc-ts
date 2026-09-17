@@ -5,7 +5,7 @@
 //   - falls back to HTTP/1.1 when the endpoint only speaks h1.
 // Bridge-only: the protocol logic (frames, headers, content-type) stays in core.
 import type { Request, Response, Stream, Transport, Headers as HeadersT } from './protocol.js'
-import { readFrames, RPCError } from './protocol.js'
+import { readFrames, RPCError, streamPayloads } from './protocol.js'
 import http2 from 'node:http2'
 import http from 'node:http'
 
@@ -67,10 +67,7 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
     const framed = readFrames(chunks)
     return Promise.resolve({
       async *[Symbol.asyncIterator]() {
-        for await (const f of framed) {
-          if (f.end) return
-          yield f.payload
-        }
+        yield* streamPayloads(framed)
       },
       cancel() {
         try { stream.close(); session.close() } catch { /* noop */ }
@@ -120,10 +117,7 @@ export function createHttp1Transport(agent?: http.Agent, base = ''): Transport {
       const framed = readFrames(source)
       return {
         async *[Symbol.asyncIterator]() {
-          for await (const f of framed) {
-            if (f.end) return
-            yield f.payload
-          }
+          yield* streamPayloads(framed)
         },
         cancel() { /* http1 closes on end */ },
       }

@@ -102,3 +102,59 @@ describe('server-stream incrementality', () => {
     expect(firstAt).toBeLessThan(200)
   })
 })
+
+describe('end-stream error (Connect JSON)', () => {
+  it('encodes/decodes the Connect error shape', async () => {
+    const { encodeEndStream, decodeEndStream } = await import('../src/protocol')
+    const bytes = encodeEndStream(16, 'missing bearer token')
+    const decoded = decodeEndStream(bytes)
+    expect(decoded).toEqual({ code: 16, message: 'missing bearer token' })
+    expect(decodeEndStream(new Uint8Array(0))).toBeNull()
+  })
+
+  it('throws on an error END frame (client surfaces it)', async () => {
+    const handlers = {
+      unary: {},
+      stream: {
+        Boom: async (_i: Uint8Array, _k: string, emit: (d: Uint8Array, e: boolean) => Promise<void>) => {
+          await emit(new Uint8Array([1]), false)
+          throw new Error('mid-stream failure')
+        },
+      },
+    }
+    const dispatch = createServer([{ path: '/t.Boom', name: 'Boom', serverStream: true }], handlers as never)
+    const server = nodeServer(dispatch)
+    await new Promise<void>(r => server.listen(0, () => r()))
+    const port = (server.address() as { port: number }).port
+    const payloads: number[] = []
+    let caught: unknown = null
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          { host: '127.0.0.1', port, path: '/t.Boom', method: 'POST', headers: { 'content-type': 'application/connect+proto' } },
+          res => {
+            const source = (async function* () { for await (const c of res) yield c as Uint8Array })()
+            void (async () => {
+              for await (const f of readFrames(source)) {
+                if (f.end) {
+                  const { decodeEndStream } = await import('../src/protocol')
+                  const e = decodeEndStream(f.payload)
+                  if (e) { reject(new (await import('../src/protocol')).RPCError(e.code, e.message)); return }
+                  resolve(); return
+                }
+                payloads.push(f.payload[0] ?? -1)
+              }
+              resolve()
+            })().catch(reject)
+          },
+        )
+        req.on('error', reject)
+        req.end()
+      })
+    } catch (e) { caught = e }
+    server.close()
+    expect(payloads).toEqual([1])
+    expect(caught).toBeInstanceOf((await import('../src/protocol')).RPCError)
+    expect((caught as { code: number }).code).toBe(13)
+  })
+})

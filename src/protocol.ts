@@ -82,6 +82,29 @@ export function httpStatus(code: number): number {
   }
 }
 
+/// Connect error-code names (wire-stable strings used on the JSON error
+/// payloads). Mirrors @connectrpc/connect `codeToString` / `codeFromString`.
+const CODE_NAMES: Record<number, string> = {
+  0: 'ok', 1: 'canceled', 2: 'unknown', 3: 'invalid_argument',
+  4: 'deadline_exceeded', 5: 'not_found', 6: 'already_exists',
+  7: 'permission_denied', 8: 'resource_exhausted', 9: 'failed_precondition',
+  10: 'aborted', 11: 'out_of_range', 12: 'unimplemented', 13: 'internal',
+  14: 'unavailable', 15: 'data_loss', 16: 'unauthenticated',
+}
+const CODE_BY_NAME: Record<string, number> = Object.fromEntries(
+  Object.entries(CODE_NAMES).map(([n, s]) => [s, Number(n)]),
+)
+
+/** Connect code -> stable lowercase name (e.g. 5 -> "not_found"). */
+export function codeToString(code: number): string {
+  return CODE_NAMES[code] ?? CODE_NAMES[2]!
+}
+
+/** Stable lowercase name -> Connect code (unknown -> 2). */
+export function codeFromString(name: string): number {
+  return CODE_BY_NAME[name] ?? 2
+}
+
 function connectFromStatus(status: number): number {
   switch (status) {
     case 400: return 3
@@ -222,14 +245,65 @@ export function detectKind(req: Request): ContentKind {
   return 'proto'
 }
 
-/** Encode an error into a stream END frame payload (`<code byte>\x00<message>`),
- *  matching the Go/Rust/Python encoders. Clients that understand it surface the
- *  error; clients that don't still see a clean END. */
-export function encodeEndStream(code: number, message: string): Bytes {
-  const msg = new TextEncoder().encode(message)
-  const out = new Uint8Array(2 + msg.length)
-  out[0] = code & 0xff
-  out[1] = 0
-  out.set(msg, 2)
-  return out
+/** Encode an error into a stream END frame payload, in the Connect
+ *  end-stream JSON shape: `{"error":{"code":"<name>","message":"..."}}`.
+ *  A clean (non-error) end is an empty payload. */
+export function encodeEndStream(
+  code: number,
+  message: string,
+  metadata?: Headers,
+): Bytes {
+  const obj: { error?: { code: string; message: string }; metadata?: Headers } = {}
+  if (code !== 0) {
+    obj.error = { code: codeToString(code), message }
+  }
+  if (metadata !== undefined && Object.keys(metadata).length > 0) {
+    obj.metadata = metadata
+  }
+  if (obj.error === undefined && obj.metadata === undefined) return new Uint8Array(0)
+  return new TextEncoder().encode(JSON.stringify(obj))
+}
+
+/** Decode an END frame payload (Connect end-stream JSON). Returns null for a
+ *  clean end (empty payload) or malformed input. */
+export function decodeEndStream(payload: Bytes): { code: number; message: string; metadata?: Headers } | null {
+  if (payload.length === 0) return null
+  let obj: unknown
+  try {
+    obj = JSON.parse(new TextDecoder().decode(payload))
+  } catch {
+    return null
+  }
+  if (typeof obj !== 'object' || obj === null) return null
+  const err = (obj as { error?: unknown }).error
+  const md = (obj as { metadata?: unknown }).metadata
+  const metadata: Headers | undefined =
+    typeof md === 'object' && md !== null
+      ? (md as Headers)
+      : undefined
+  if (typeof err !== 'object' || err === null) {
+    return metadata !== undefined ? { code: 0, message: '', metadata } : null
+  }
+  const name = (err as { code?: unknown }).code
+  const message = (err as { message?: unknown }).message
+  return {
+    code: typeof name === 'string' ? codeFromString(name) : 2,
+    message: typeof message === 'string' ? message : '',
+    ...(metadata !== undefined ? { metadata } : {}),
+  }
+}
+
+/** Turn a framed response into a payload stream. A non-empty END payload is a
+ *  Connect end-stream error: throw it instead of silently ending. */
+export async function* streamPayloads(
+  framed: AsyncIterable<{ payload: Bytes; end: boolean }>,
+): AsyncGenerator<Bytes, void> {
+  for await (const f of framed) {
+    if (f.end) {
+      const err = decodeEndStream(f.payload)
+      if (err !== null && err.code !== 0) throw new RPCError(err.code, err.message)
+      return
+    }
+    yield f.payload
+  }
 }
