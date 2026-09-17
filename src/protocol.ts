@@ -26,6 +26,73 @@ export function createMetadataTransport(metadata: Headers, transport: Transport)
   }
 }
 
+/**
+ * A call interceptor. It wraps the next unary/stream invocation and may mutate
+ * the request (attach auth/metadata), observe the response, short-circuit, or
+ * impose a deadline. `next` performs the actual transport call.
+ *
+ * This is the ONE built-in extension point: auth, retry, logging, and timeouts
+ * are all written as interceptors instead of per-transport wrappers.
+ */
+export interface Interceptor {
+  unary?(req: Request, next: (req: Request) => Promise<Response>): Promise<Response>
+  stream?(req: Request, next: (req: Request) => Promise<Stream>): Promise<Stream>
+}
+
+/** Apply interceptors to a Transport (outermost first, like a middleware chain). */
+export function createInterceptorTransport(
+  interceptors: Interceptor[],
+  transport: Transport,
+): Transport {
+  const chain = (
+    req: Request,
+    call: (r: Request) => Promise<Response>,
+  ): Promise<Response> => {
+    const dispatch = (i: number, r: Request): Promise<Response> => {
+      const ic = interceptors[i]
+      if (ic === undefined) return call(r)
+      const next = (nr: Request): Promise<Response> => dispatch(i + 1, nr)
+      return ic.unary ? ic.unary(r, next) : next(r)
+    }
+    return dispatch(0, req)
+  }
+
+  const streamChain = (
+    req: Request,
+    call: (r: Request) => Promise<Stream>,
+  ): Promise<Stream> => {
+    const dispatch = (i: number, r: Request): Promise<Stream> => {
+      const ic = interceptors[i]
+      if (ic === undefined) return call(r)
+      const next = (nr: Request): Promise<Stream> => dispatch(i + 1, nr)
+      return ic.stream ? ic.stream(r, next) : next(r)
+    }
+    return dispatch(0, req)
+  }
+
+  return {
+    send: (req) => chain(req, (r) => transport.send(r)),
+    openStream: (req) => streamChain(req, (r) => transport.openStream(r)),
+  }
+}
+
+/** Built-in interceptor: attach fixed metadata (auth/tenant/token) to every call. */
+export function metadataInterceptor(metadata: Headers): Interceptor {
+  return {
+    unary: (req, next) => next(withMetadata(metadata, req)),
+    stream: (req, next) => next(withMetadata(metadata, req)),
+  }
+}
+
+/** Built-in interceptor: impose a per-call deadline (Connect-Timeout-Ms). */
+export function timeoutInterceptor(timeoutMs: number): Interceptor {
+  const apply = (req: Request) => withTimeout(req, timeoutMs)
+  return {
+    unary: (req, next) => next(apply(req)),
+    stream: (req, next) => next(apply(req)),
+  }
+}
+
 /** A normalized RPC request. */
 export interface Request {
   url: string
