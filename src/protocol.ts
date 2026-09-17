@@ -14,7 +14,11 @@ export function withMetadata(metadata: Headers, req: Request): Request {
   return { ...req, headers: merged }
 }
 
-/** MetadataTransport decorates a Transport with fixed metadata headers. */
+/**
+ * @deprecated Use `createInterceptorTransport([metadataInterceptor(md)], transport)`
+ * instead. Kept for one release; the interceptor form composes with deadlines,
+ * retry, and logging, and does not depend on the adapter.
+ */
 export function createMetadataTransport(metadata: Headers, transport: Transport): Transport {
   return {
     async send(req: Request): Promise<Response> {
