@@ -7,7 +7,7 @@
 // flushed frame-by-frame — never buffered. Runtime adapters (node:http,
 // node:http2, fetch/Web) implement the writer for their transport.
 import type { Bytes, Headers, Request, Response, ResponseWriter, ServerDispatch } from './protocol.js'
-import { httpStatus, RPCError, frame, encodeEndStream } from './protocol.js'
+import { httpStatus, RPCError, frame, encodeEndStream, parseTimeout, HEADER_TIMEOUT } from './protocol.js'
 import { type ContentKind, type ServiceHandlers, detectKind } from './protocol.js'
 import nodeHttp from 'node:http'
 import nodeHttp2 from 'node:http2'
@@ -30,6 +30,10 @@ export function createServer(methods: MethodSpec2[], handlers: ServiceHandlers):
     const pathname = new URL(req.url.startsWith('http') ? req.url : 'http://localhost' + req.url).pathname
     const body = req.body ?? new Uint8Array(0)
 
+    // Deadline: the Connect timeout header bounds the whole call.
+    const timeoutMs = parseTimeout(req.headers[HEADER_TIMEOUT]?.[0])
+    const timedOut = (): RPCError => new RPCError(4, 'deadline exceeded')
+
     // `Spec` matching (streaming methods are POST-only).
     const spec = methods.find(m => m.path === pathname && (!m.serverStream || req.method === 'POST'))
     if (!spec) return fail(w, new RPCError(5, 'not found'), kind)
@@ -51,7 +55,19 @@ export function createServer(methods: MethodSpec2[], handlers: ServiceHandlers):
         await w.write(frame(data, false))
       }
       try {
-        await h(body, kind, emit)
+        if (timeoutMs > 0) {
+          let timer: ReturnType<typeof setTimeout> | undefined
+          const deadline = new Promise<never>((_, rej) => {
+            timer = setTimeout(() => rej(timedOut()), timeoutMs)
+          })
+          try {
+            await Promise.race([h(body, kind, emit), deadline])
+          } finally {
+            if (timer !== undefined) clearTimeout(timer)
+          }
+        } else {
+          await h(body, kind, emit)
+        }
       } catch (e) {
         // Propagate the failure in the END frame (HTTP stays 200).
         const err = e instanceof RPCError ? e : new RPCError(13, String(e))
@@ -72,7 +88,10 @@ export function createServer(methods: MethodSpec2[], handlers: ServiceHandlers):
     if (!h) return fail(w, new RPCError(5, 'no handler'), kind)
     let out: Bytes
     try {
-      out = await h(body, kind)
+      out = timeoutMs > 0 ? await Promise.race([
+        h(body, kind),
+        new Promise<never>((_, rej) => setTimeout(() => rej(timedOut()), timeoutMs)),
+      ]) : await h(body, kind)
     } catch (e) {
       return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), kind)
     }

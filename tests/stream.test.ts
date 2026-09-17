@@ -158,3 +158,42 @@ describe('end-stream error (Connect JSON)', () => {
     expect((caught as { code: number }).code).toBe(13)
   })
 })
+
+describe('deadline (Connect-Timeout-Ms)', () => {
+  it('stream aborts with deadline_exceeded (code 4) when the handler is too slow', async () => {
+    const handlers = {
+      unary: {},
+      stream: {
+        Slow: async (_i: Uint8Array, _k: string, emit: (d: Uint8Array, e: boolean) => Promise<void>) => {
+          await emit(new Uint8Array([1]), false)
+          await new Promise(r => setTimeout(r, 2000))
+          await emit(new Uint8Array(0), true)
+        },
+      },
+    }
+    const dispatch = createServer([{ path: '/t.Slow', name: 'Slow', serverStream: true }], handlers as never)
+    const server = nodeServer(dispatch)
+    await new Promise<void>(r => server.listen(0, () => r()))
+    const port = (server.address() as { port: number }).port
+    let err: { code?: number } | null = null
+    await new Promise<void>(resolve => {
+      const req = http.request(
+        { host: '127.0.0.1', port, path: '/t.Slow', method: 'POST',
+          headers: { 'content-type': 'application/connect+proto', 'connect-timeout-ms': '200' } },
+        res => {
+          const source = (async function* () { for await (const c of res) yield c as Uint8Array })()
+          void (async () => {
+            const { readFrames, decodeEndStream } = await import('../src/protocol')
+            for await (const f of readFrames(source)) {
+              if (f.end) { err = decodeEndStream(f.payload); break }
+            }
+            resolve()
+          })()
+        },
+      )
+      req.end()
+    })
+    server.close()
+    expect(err?.code).toBe(4)
+  })
+})

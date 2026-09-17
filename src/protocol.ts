@@ -164,6 +164,35 @@ function concat(a: Bytes, b: Bytes): Bytes {
   return out
 }
 
+// ---- deadline (Connect-Timeout-Ms) ----
+
+/** The Connect request-timeout header. */
+export const HEADER_TIMEOUT = 'connect-timeout-ms'
+
+/** Attach a deadline to a request (header + local enforcement). */
+export function withTimeout(req: Request, timeoutMs: number): Request {
+  if (timeoutMs <= 0) return req
+  return {
+    ...req,
+    headers: { ...req.headers, [HEADER_TIMEOUT]: [String(Math.ceil(timeoutMs))] },
+  }
+}
+
+/** Parse the Connect timeout header into milliseconds (0 = no deadline). */
+export function parseTimeout(value: string | undefined): number {
+  if (value === undefined) return 0
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0
+}
+
+/** Run `run` under an abort signal that fires after timeoutMs (0 = none). */
+export function deadlineSignal(timeoutMs: number): { signal?: AbortSignal; cancel: () => void } {
+  if (timeoutMs <= 0) return { cancel: () => {} }
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(new RPCError(4, 'deadline exceeded')), timeoutMs)
+  return { signal: ctrl.signal, cancel: () => clearTimeout(t) }
+}
+
 /** Build the default gRPC-style path for a method. */
 export function urlFor(pkg: string, service: string, method: string): string {
   return `/${pkg}.${service}/${method}`
