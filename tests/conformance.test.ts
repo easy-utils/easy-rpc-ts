@@ -25,7 +25,7 @@ function makeServer() {
       })
     } else if (req.url === '/easyrpc.conformance.v1.ConformanceService/Count') {
       res.writeHead(200, { 'content-type': 'application/connect+proto' })
-      // send 3 frames
+      // send 3 frames + the required END frame (spec §3.2)
       for (let i = 0; i < 3; i++) {
         const msg = toBinary(CountResponseSchema, create(CountResponseSchema, { index: i }))
         const frame = new Uint8Array(5 + msg.length)
@@ -34,6 +34,9 @@ function makeServer() {
         frame.set(msg, 5)
         res.write(Buffer.from(frame))
       }
+      const end = new Uint8Array(5)
+      end[0] = 0x02
+      res.write(Buffer.from(end))
       res.end()
     } else {
       res.writeHead(404)

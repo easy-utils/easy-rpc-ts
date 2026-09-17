@@ -586,16 +586,21 @@ export function decodeEndStream(payload: Bytes): {
 }
 
 /** Turn a framed response into a payload stream. A non-empty END payload is a
- *  Connect end-stream error: throw it instead of silently ending. */
+ *  Connect end-stream error: throw it instead of silently ending. A stream
+ *  that ends WITHOUT an END frame is truncated (fault matrix F2): the Connect
+ *  protocol requires every server-stream to terminate with an END frame. */
 export async function* streamPayloads(
   framed: AsyncIterable<{ payload: Bytes; end: boolean }>,
 ): AsyncGenerator<Bytes, void> {
+  let sawEnd = false
   for await (const f of framed) {
     if (f.end) {
+      sawEnd = true
       const err = decodeEndStream(f.payload)
       if (err !== null && err.code !== 0) throw new RPCError(err.code, err.message, err.details)
       return
     }
     yield f.payload
   }
+  if (!sawEnd) throw new RPCError(13, 'stream ended without END frame')
 }

@@ -26,9 +26,15 @@ export interface ConnectOptions {
   interceptors?: Interceptor[]
   /** Adapter-specific knobs. */
   node?: { protocol?: 'h2' | 'h2c' | 'h1' | 'auto'; httpAgent?: import('node:http').Agent }
+  /** Inject a custom adapter. When set, `mode` is ignored and the built-in
+   * metadata/deadline interceptors (and any user interceptors) wrap THIS
+   * transport — the same injection semantics as C# `ConnectOptions.Adapter`
+   * and Swift `connect(transport:)`. */
+  transport?: Transport
 }
 
 function adapterFor(mode: Mode, opts: ConnectOptions): Transport {
+  if (opts.transport !== undefined) return opts.transport
   const base = opts.baseUrl.replace(/\/+$/, '')
   if (mode === 'fetch') return createFetchTransport(base)
   if (mode === 'h1') return createHttp1Transport(opts.node?.httpAgent, base)
@@ -44,7 +50,8 @@ function adapterFor(mode: Mode, opts: ConnectOptions): Transport {
  * Swap `mode` and the interceptors are unchanged — that is the whole point.
  */
 export function connect(opts: ConnectOptions): Transport {
-  const mode: Mode = opts.mode ?? 'auto'
+  // A custom adapter short-circuits mode selection; interceptors still apply.
+  const mode: Mode = opts.transport !== undefined ? 'auto' : (opts.mode ?? 'auto')
   const ics: Interceptor[] = []
   const md: Headers = {}
   if (opts.token !== undefined && opts.token !== '') {

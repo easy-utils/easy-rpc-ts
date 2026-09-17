@@ -1,6 +1,6 @@
 {
   "name": "@easy-utils/easy-rpc",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Zero-runtime-bindings easy-rpc core for TypeScript (Connect wire: unary + server-stream).",
   "type": "module",
   "main": "./src/index.ts",
