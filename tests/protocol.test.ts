@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import http from 'node:http'
 import { frame, readFrames, httpStatus, RPCError } from '../src/protocol'
 
 describe('framing', () => {
@@ -44,5 +45,36 @@ describe('interceptors', () => {
     await t.send({ url: '/x', method: 'POST', headers: {}, body: undefined })
     expect(seen['x-test']).toEqual(['abc'])
     expect(seen['connect-timeout-ms']).toEqual(['250'])
+  })
+})
+
+describe('max message + protocol version', () => {
+  it('frame rejects an over-limit payload (ResourceExhausted=8)', async () => {
+    const { frame, DEFAULT_MAX_MESSAGE_BYTES } = await import('../src/protocol')
+    expect(() => frame(new Uint8Array(DEFAULT_MAX_MESSAGE_BYTES + 1))).toThrow()
+    const ok = frame(new Uint8Array(16))
+    expect(ok.length).toBe(21)
+  })
+
+  it('server rejects an unsupported protocol version', async () => {
+    const { createServer, nodeServer } = await import('../src/server')
+    const { readFrames, decodeErrorJson } = await import('../src/protocol')
+    const dispatch = createServer(
+      [{ path: '/t.Echo', name: 'Echo', serverStream: false }],
+      { unary: { Echo: async () => new Uint8Array(1) }, stream: {} } as never,
+    )
+    const server = nodeServer(dispatch)
+    await new Promise<void>(r => server.listen(0, () => r()))
+    const port = (server.address() as { port: number }).port
+    const status = await new Promise<number>(resolve => {
+      const req = http.request(
+        { host: '127.0.0.1', port, path: '/t.Echo', method: 'POST',
+          headers: { 'content-type': 'application/proto', 'connect-protocol-version': '999' } },
+        res => { res.resume(); resolve(res.statusCode ?? 0) },
+      )
+      req.end()
+    })
+    server.close()
+    expect(status).toBe(501) // unimplemented
   })
 })

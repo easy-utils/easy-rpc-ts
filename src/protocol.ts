@@ -239,8 +239,18 @@ function connectFromStatus(status: number): number {
 const FLAG_COMPRESSED = 0x01
 const FLAG_END_STREAM = 0x02
 
+/** Default maximum message/frame payload size (Connect's read/writeMaxBytes default). */
+export const DEFAULT_MAX_MESSAGE_BYTES = 4 * 1024 * 1024
+
+/** The Connect protocol-version header. */
+export const HEADER_PROTOCOL_VERSION = 'connect-protocol-version'
+
+/** Current Connect protocol version we speak. */
+export const CONNECT_PROTOCOL_VERSION = '1'
+
 /** Encode a single streaming frame. */
-export function frame(payload: Bytes, endStream = false): Bytes {
+export function frame(payload: Bytes, endStream = false, maxBytes = DEFAULT_MAX_MESSAGE_BYTES): Bytes {
+  if (payload.length > maxBytes) throw new RPCError(8, `message too large: ${payload.length} > ${maxBytes}`)
   const flags = endStream ? FLAG_END_STREAM : 0
   const out = new Uint8Array(5 + payload.length)
   out[0] = flags
@@ -253,6 +263,7 @@ export function frame(payload: Bytes, endStream = false): Bytes {
 /** Read a frame from an async iterator of byte chunks. Yields {payload, end}. */
 export async function* readFrames(
   chunks: AsyncIterable<Bytes>,
+  maxBytes = DEFAULT_MAX_MESSAGE_BYTES,
 ): AsyncGenerator<{ payload: Bytes; end: boolean }, void> {
   // accumulate raw bytes
   let acc = new Uint8Array(0) as Bytes
@@ -262,7 +273,7 @@ export async function* readFrames(
       if (acc.length < 5) break
       const flags = acc[0] ?? 0
       const len = new DataView(acc.buffer, acc.byteOffset, acc.byteLength).getUint32(1, false)
-      if (len > 64 * 1024 * 1024) throw new RPCError(13, 'frame too large')
+      if (len > maxBytes) throw new RPCError(8, `frame too large: ${len} > ${maxBytes}`)
       if (acc.length < 5 + len) break
       const payload = acc.slice(5, 5 + len)
       acc = acc.slice(5 + len)

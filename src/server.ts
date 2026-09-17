@@ -7,7 +7,10 @@
 // flushed frame-by-frame — never buffered. Runtime adapters (node:http,
 // node:http2, fetch/Web) implement the writer for their transport.
 import type { Bytes, Headers, Request, Response, ResponseWriter, ServerDispatch } from './protocol.js'
-import { httpStatus, RPCError, frame, encodeEndStream, parseTimeout, HEADER_TIMEOUT, encodeErrorJson } from './protocol.js'
+import {
+  httpStatus, RPCError, frame, encodeEndStream, parseTimeout, HEADER_TIMEOUT, encodeErrorJson,
+  DEFAULT_MAX_MESSAGE_BYTES, HEADER_PROTOCOL_VERSION, CONNECT_PROTOCOL_VERSION,
+} from './protocol.js'
 import { type ContentKind, type ServiceHandlers, detectKind } from './protocol.js'
 import nodeHttp from 'node:http'
 import nodeHttp2 from 'node:http2'
@@ -24,11 +27,25 @@ function streamContentFor(kind: ContentKind): string { return kind === 'json' ? 
 export type ServerHandler = ServerDispatch
 
 /** Build a push-based dispatch function from method specs + handler tables. */
-export function createServer(methods: MethodSpec2[], handlers: ServiceHandlers): ServerHandler {
+export function createServer(
+  methods: MethodSpec2[],
+  handlers: ServiceHandlers,
+  opts: { maxMessageBytes?: number } = {},
+): ServerHandler {
+  const maxBytes = opts.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES
   return async (req: Request, w: ResponseWriter): Promise<void> => {
     const kind = detectKind(req)
     const pathname = new URL(req.url.startsWith('http') ? req.url : 'http://localhost' + req.url).pathname
     const body = req.body ?? new Uint8Array(0)
+
+    // Protocol version: reject an explicitly-unsupported version (absent is ok).
+    const pv = req.headers[HEADER_PROTOCOL_VERSION]?.[0]
+    if (pv !== undefined && pv !== '' && pv !== CONNECT_PROTOCOL_VERSION) {
+      return fail(w, new RPCError(12, `unsupported connect-protocol-version: ${pv}`), kind)
+    }
+    if (body.length > maxBytes) {
+      return fail(w, new RPCError(8, `request too large: ${body.length} > ${maxBytes}`), kind)
+    }
 
     // Deadline: the Connect timeout header bounds the whole call.
     const timeoutMs = parseTimeout(req.headers[HEADER_TIMEOUT]?.[0])
