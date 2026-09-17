@@ -108,11 +108,12 @@ export function createHttp1Transport(agent?: http.Agent, base = ''): Transport {
       const res = await httpRequest(req, agent, base)
       const headers: HeadersT = {}
       for (const [k, v] of Object.entries(res.headers)) headers[k] = [v]
+      const err = decodeErrorJson(res.status, headers, res.body)
       return {
         status: res.status,
         headers,
         body: res.body,
-        error: decodeErrorJson(res.status, headers, res.body) ?? undefined,
+        ...(err !== null ? { error: err } : {}),
       }
     },
     async openStream(req: Request): Promise<Stream> {

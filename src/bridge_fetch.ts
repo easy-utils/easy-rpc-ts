@@ -20,7 +20,8 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
       })
       const body = new Uint8Array(await res.arrayBuffer())
       const headers = fromFetchHeaders(res.headers)
-      return { status: res.status, headers, body, error: decodeErrorJson(res.status, headers, body) ?? undefined }
+      const error = decodeErrorJson(res.status, headers, body)
+      return { status: res.status, headers, body, ...(error !== null ? { error } : {}) }
     },
     async openStream(req: Request): Promise<Stream> {
       const res = await fetchFn(join(req.url), {
