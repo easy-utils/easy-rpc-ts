@@ -521,7 +521,10 @@ export interface ServerMethodSpec {
 export function detectKind(req: Request): ContentKind {
   const ct = req.headers['content-type']?.[0] ?? ''
   const ac = req.headers['accept']?.[0] ?? ''
-  if (ct.startsWith('application/json') || ac.startsWith('application/json')) return 'json'
+  // Streaming JSON arrives as application/connect+json — both prefixes are
+  // JSON kinds (spec §2).
+  const isJson = (v: string) => v.startsWith('application/json') || v.startsWith('application/connect+json')
+  if (isJson(ct) || isJson(ac)) return 'json'
   return 'proto'
 }
 
