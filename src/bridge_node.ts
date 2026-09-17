@@ -42,6 +42,11 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
   async function doSend(req: Request): Promise<Response> {
     const session = connect(req.url)
     const stream = session.request(headersFor(req, false, opts.base))
+    if (req.signal !== undefined) {
+      const kill = () => { try { stream.close(); session.close() } catch { /* noop */ } }
+      if (req.signal.aborted) kill()
+      else req.signal.addEventListener('abort', kill, { once: true })
+    }
     const chunks: Uint8Array[] = []
     const status = await new Promise<number>((resolve, reject) => {
       stream.on('response', (headers: http2.IncomingHttpHeaders) => {
@@ -61,6 +66,11 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
   function doOpenStream(req: Request): Promise<Stream> {
     const session = connect(req.url)
     const stream = session.request(headersFor(req, true, opts.base))
+    if (req.signal !== undefined) {
+      const kill = () => { try { stream.close(); session.close() } catch { /* noop */ } }
+      if (req.signal.aborted) kill()
+      else req.signal.addEventListener('abort', kill, { once: true })
+    }
     stream.end(req.body ?? new Uint8Array(0))
     const chunks = (async function* () {
       for await (const c of stream) yield c as Uint8Array
@@ -158,6 +168,10 @@ function httpRequest(req: Request, agent?: http.Agent, base = ''): Promise<{ sta
       })
     })
     preq.on('error', reject)
+    if (req.signal !== undefined) {
+      if (req.signal.aborted) { preq.destroy(req.signal.reason as Error); return }
+      req.signal.addEventListener('abort', () => preq.destroy(req.signal?.reason as Error), { once: true })
+    }
     preq.end(req.body ?? new Uint8Array(0))
   })
 }

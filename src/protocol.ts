@@ -88,12 +88,40 @@ export function metadataInterceptor(metadata: Headers): Interceptor {
   }
 }
 
-/** Built-in interceptor: impose a per-call deadline (Connect-Timeout-Ms). */
+/**
+ * Built-in interceptor: impose a per-call deadline.
+ *
+ * It sets the Connect `connect-timeout-ms` header (server-side deadline) AND a
+ * local AbortSignal that adapters honour, so the client cancels even when the
+ * server cannot enforce the deadline. The signal is cleared on completion.
+ */
 export function timeoutInterceptor(timeoutMs: number): Interceptor {
-  const apply = (req: Request) => withTimeout(req, timeoutMs)
+  const withDeadline = (req: Request): { req: Request; done: () => void } => {
+    if (timeoutMs <= 0) return { req, done: () => {} }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(new RPCError(4, 'deadline exceeded')), timeoutMs)
+    return {
+      req: { ...withTimeout(req, timeoutMs), signal: ctrl.signal },
+      done: () => clearTimeout(timer),
+    }
+  }
   return {
-    unary: (req, next) => next(apply(req)),
-    stream: (req, next) => next(apply(req)),
+    async unary(req, next) {
+      const { req: r, done } = withDeadline(req)
+      try {
+        return await next(r)
+      } finally {
+        done()
+      }
+    },
+    async stream(req, next) {
+      const { req: r, done } = withDeadline(req)
+      try {
+        return await next(r)
+      } finally {
+        done()
+      }
+    },
   }
 }
 
@@ -103,6 +131,9 @@ export interface Request {
   method: string // GET / POST / ...
   headers: Headers
   body: Bytes | undefined
+  /** Local cancellation channel. Adapters that support abort (fetch signal,
+   *  node request destroy, h2 stream close) honour it; others ignore it. */
+  signal?: AbortSignal
 }
 
 /** A normalized response. */

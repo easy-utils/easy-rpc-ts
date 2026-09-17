@@ -17,6 +17,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
         method: req.method,
         headers: sendHeaders(req.headers),
         body: req.body as unknown as BodyInit | null,
+        ...(req.signal !== undefined ? { signal: req.signal } : {}),
       })
       const body = new Uint8Array(await res.arrayBuffer())
       const headers = fromFetchHeaders(res.headers)
@@ -28,6 +29,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
         method: req.method,
         headers: { ...sendHeaders(req.headers), 'connect-accept-encoding': 'gzip' },
         body: req.body as unknown as BodyInit | null,
+        ...(req.signal !== undefined ? { signal: req.signal } : {}),
       })
       if (!res.body) return { async *[Symbol.asyncIterator]() {}, cancel() {} }
       const reader = res.body.getReader()

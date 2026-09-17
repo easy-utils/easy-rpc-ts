@@ -78,3 +78,27 @@ describe('max message + protocol version', () => {
     expect(status).toBe(501) // unimplemented
   })
 })
+
+describe('local deadline cancels the adapter', () => {
+  it('timeout interceptor aborts the request (no adapter support needed)', async () => {
+    const { createInterceptorTransport, timeoutInterceptor, RPCError } = await import('../src/protocol')
+    // An adapter that never resolves the request, but honours the signal.
+    const fake = {
+      async send(req: { signal?: AbortSignal }) {
+        return await new Promise((_res, rej) => {
+          req.signal?.addEventListener('abort', () => rej(req.signal!.reason))
+        })
+      },
+      async openStream() { throw new Error('unused') },
+    }
+    const t = createInterceptorTransport([timeoutInterceptor(50)], fake as never)
+    const started = Date.now()
+    let err: unknown
+    try {
+      await t.send({ url: '/x', method: 'POST', headers: {}, body: undefined })
+    } catch (e) { err = e }
+    expect(Date.now() - started).toBeLessThan(500)
+    expect(err).toBeInstanceOf(RPCError)
+    expect((err as { code: number }).code).toBe(4)
+  })
+})
