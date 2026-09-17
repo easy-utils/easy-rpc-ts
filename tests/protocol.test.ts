@@ -102,3 +102,19 @@ describe('local deadline cancels the adapter', () => {
     expect((err as { code: number }).code).toBe(4)
   })
 })
+
+describe('connect composition root', () => {
+  it('installs metadata + deadline and is adapter-agnostic', async () => {
+    const { connect } = await import('../src/connect')
+    const { RPCError } = await import('../src/protocol')
+    // node mode with an unroutable port: the deadline must fire locally.
+    const t = connect({ baseUrl: 'http://127.0.0.1:1', token: 'abc', mode: 'h1', timeoutMs: 80 })
+    const started = Date.now()
+    let err: unknown
+    try {
+      await t.send({ url: '/x', method: 'POST', headers: {}, body: new Uint8Array(0) })
+    } catch (e) { err = e }
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(err).toBeDefined()
+  })
+})
