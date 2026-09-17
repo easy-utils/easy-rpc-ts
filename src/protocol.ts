@@ -172,6 +172,53 @@ export function codeFromString(name: string): number {
   return CODE_BY_NAME[name] ?? 2
 }
 
+/** Connect unary error body (JSON). The HTTP status carries the class; the
+ *  body carries the exact code name + message + optional details. */
+export interface ConnectErrorBody {
+  code: string
+  message: string
+  details?: unknown[]
+}
+
+/** Build the Connect unary error body from a code + message. */
+export function encodeErrorJson(code: number, message: string, details?: unknown[]): Bytes {
+  const body: ConnectErrorBody = { code: codeToString(code), message }
+  if (details !== undefined && details.length > 0) body.details = details
+  return new TextEncoder().encode(JSON.stringify(body))
+}
+
+/** Parse a Connect unary error body. Tolerates the legacy plain-text body and
+ *  the lossy `connect-code`/`connect-error` headers for backward compatibility.
+ *  Returns null when the response is not an error. */
+export function decodeErrorJson(
+  status: number,
+  headers: Headers,
+  body: Bytes,
+): RPCError | null {
+  if (status < 300) return null
+  // Prefer the exact code in the response header (legacy servers), then the
+  // Connect JSON body, then fall back to the lossy status mapping.
+  const hdrCode = headers['connect-code']?.[0]
+  if (hdrCode !== undefined) {
+    const c = Number.parseInt(hdrCode, 10)
+    if (Number.isFinite(c)) {
+      return new RPCError(c, headers['connect-error']?.[0] ?? '')
+    }
+  }
+  if (body.length > 0) {
+    try {
+      const obj = JSON.parse(new TextDecoder().decode(body)) as ConnectErrorBody
+      if (obj !== null && typeof obj === 'object' && typeof obj.code === 'string') {
+        return new RPCError(codeFromString(obj.code), typeof obj.message === 'string' ? obj.message : '')
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  const text = body.length > 0 ? new TextDecoder().decode(body) : ''
+  return new RPCError(connectFromStatus(status), text)
+}
+
 function connectFromStatus(status: number): number {
   switch (status) {
     case 400: return 3

@@ -1,6 +1,6 @@
 // fetch bridge for browsers. Adapts window.fetch to the Transport interface.
 import type { Request, Response, Stream, Transport } from './protocol.js'
-import { readFrames, streamPayloads } from './protocol.js'
+import { readFrames, streamPayloads, decodeErrorJson } from './protocol.js'
 
 /** Build a fetch-based Transport. */
 export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch): Transport {
@@ -18,7 +18,8 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
         body: req.body as unknown as BodyInit | null,
       })
       const body = new Uint8Array(await res.arrayBuffer())
-      return { status: res.status, headers: fromFetchHeaders(res.headers), body }
+      const headers = fromFetchHeaders(res.headers)
+      return { status: res.status, headers, body, error: decodeErrorJson(res.status, headers, body) ?? undefined }
     },
     async openStream(req: Request): Promise<Stream> {
       const res = await fetchFn(join(req.url), {

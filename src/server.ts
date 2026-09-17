@@ -7,7 +7,7 @@
 // flushed frame-by-frame — never buffered. Runtime adapters (node:http,
 // node:http2, fetch/Web) implement the writer for their transport.
 import type { Bytes, Headers, Request, Response, ResponseWriter, ServerDispatch } from './protocol.js'
-import { httpStatus, RPCError, frame, encodeEndStream, parseTimeout, HEADER_TIMEOUT } from './protocol.js'
+import { httpStatus, RPCError, frame, encodeEndStream, parseTimeout, HEADER_TIMEOUT, encodeErrorJson } from './protocol.js'
 import { type ContentKind, type ServiceHandlers, detectKind } from './protocol.js'
 import nodeHttp from 'node:http'
 import nodeHttp2 from 'node:http2'
@@ -103,10 +103,13 @@ export function createServer(methods: MethodSpec2[], handlers: ServiceHandlers):
 }
 
 /** Emit a non-200 error response (before any stream body has been written). */
-async function fail(w: ResponseWriter, err: RPCError, kind: ContentKind): Promise<void> {
+async function fail(w: ResponseWriter, err: RPCError, _kind: ContentKind): Promise<void> {
+  // Connect unary error: HTTP status carries the class, the body is JSON
+  // `{code,message}`. Legacy plain-text + connect-code headers are still
+  // accepted by clients for backward compatibility.
   w.status(httpStatus(err.code))
-  w.header('content-type', kind === 'json' ? 'application/json' : 'text/plain')
-  await w.write(new TextEncoder().encode(err.message))
+  w.header('content-type', 'application/json')
+  await w.write(encodeErrorJson(err.code, err.message))
   await w.finish()
 }
 
