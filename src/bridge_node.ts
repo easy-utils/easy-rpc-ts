@@ -5,6 +5,7 @@
 //   - falls back to HTTP/1.1 when the endpoint only speaks h1.
 // Bridge-only: the protocol logic (frames, headers, content-type) stays in core.
 import type { Request, Response, Stream, Transport, Headers as HeadersT } from './protocol.js'
+import { gzipDecompress } from './compression.js'
 import { readFrames, RPCError, streamPayloads, decodeErrorJson } from './protocol.js'
 import http2 from 'node:http2'
 import http from 'node:http'
@@ -64,7 +65,7 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
     const chunks = (async function* () {
       for await (const c of stream) yield c as Uint8Array
     })()
-    const framed = readFrames(chunks)
+    const framed = readFrames(chunks, undefined, gzipDecompress)
     return Promise.resolve({
       async *[Symbol.asyncIterator]() {
         yield* streamPayloads(framed)
@@ -119,7 +120,7 @@ export function createHttp1Transport(agent?: http.Agent, base = ''): Transport {
       const source = (async function* () {
         for await (const c of res.raw) yield c
       })()
-      const framed = readFrames(source)
+      const framed = readFrames(source, undefined, gzipDecompress)
       return {
         async *[Symbol.asyncIterator]() {
           yield* streamPayloads(framed)
@@ -170,6 +171,7 @@ function headersFor(req: Request, stream: boolean, base = ''): http2.OutgoingHtt
   }
   if (!out['content-type']) out['content-type'] = stream ? 'application/connect+proto' : 'application/proto'
   if (!out['accept']) out['accept'] = stream ? 'application/connect+proto' : 'application/proto'
+  if (!out['connect-accept-encoding']) out['connect-accept-encoding'] = 'gzip'
   return out
 }
 

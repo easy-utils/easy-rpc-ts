@@ -1,5 +1,6 @@
 // fetch bridge for browsers. Adapts window.fetch to the Transport interface.
 import type { Request, Response, Stream, Transport } from './protocol.js'
+import { gzipDecompress } from './compression.js'
 import { readFrames, streamPayloads, decodeErrorJson } from './protocol.js'
 
 /** Build a fetch-based Transport. */
@@ -24,7 +25,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
     async openStream(req: Request): Promise<Stream> {
       const res = await fetchFn(join(req.url), {
         method: req.method,
-        headers: sendHeaders(req.headers),
+        headers: { ...sendHeaders(req.headers), 'connect-accept-encoding': 'gzip' },
         body: req.body as unknown as BodyInit | null,
       })
       if (!res.body) return { async *[Symbol.asyncIterator]() {}, cancel() {} }
@@ -37,7 +38,7 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
           yield value
         }
       })()
-      const framed = readFrames(source)
+      const framed = readFrames(source, undefined, gzipDecompress)
       return {
         async *[Symbol.asyncIterator]() {
           yield* streamPayloads(framed)

@@ -197,3 +197,44 @@ describe('deadline (Connect-Timeout-Ms)', () => {
     expect(err?.code).toBe(4)
   })
 })
+
+describe('gzip compression (opt-in via accept-encoding)', () => {
+  it('compresses large frames when the client advertises gzip', async () => {
+    const big = new TextEncoder().encode('x'.repeat(4096))
+    const handlers = {
+      unary: {},
+      stream: {
+        Many: async (_i: Uint8Array, _k: string, emit: (d: Uint8Array, e: boolean) => Promise<void>) => {
+          await emit(big, false)
+          await emit(new Uint8Array(0), true)
+        },
+      },
+    }
+    const dispatch = createServer([{ path: '/t.Many', name: 'Many', serverStream: true }], handlers as never)
+    const server = nodeServer(dispatch)
+    await new Promise<void>(r => server.listen(0, () => r()))
+    const port = (server.address() as { port: number }).port
+    const { readFrames } = await import('../src/protocol')
+    const { gzipDecompress } = await import('../src/compression')
+    const payloads: number[] = []
+    await new Promise<void>(resolve => {
+      const req = http.request(
+        { host: '127.0.0.1', port, path: '/t.Many', method: 'POST',
+          headers: { 'content-type': 'application/connect+proto', 'connect-accept-encoding': 'gzip' } },
+        res => {
+          const source = (async function* () { for await (const c of res) yield c as Uint8Array })()
+          void (async () => {
+            for await (const f of readFrames(source, undefined, gzipDecompress)) {
+              if (f.end) break
+              payloads.push(f.payload.length)
+            }
+            resolve()
+          })()
+        },
+      )
+      req.end()
+    })
+    server.close()
+    expect(payloads).toEqual([4096]) // decompressed transparently
+  })
+})

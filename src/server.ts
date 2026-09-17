@@ -10,7 +10,9 @@ import type { Bytes, Headers, Request, Response, ResponseWriter, ServerDispatch 
 import {
   httpStatus, RPCError, frame, encodeEndStream, parseTimeout, HEADER_TIMEOUT, encodeErrorJson,
   DEFAULT_MAX_MESSAGE_BYTES, HEADER_PROTOCOL_VERSION, CONNECT_PROTOCOL_VERSION,
+  HEADER_ACCEPT_ENCODING, ENCODING_GZIP, COMPRESS_MIN_BYTES,
 } from './protocol.js'
+import { gzipCompress } from './compression.js'
 import { type ContentKind, type ServiceHandlers, detectKind } from './protocol.js'
 import nodeHttp from 'node:http'
 import nodeHttp2 from 'node:http2'
@@ -61,6 +63,9 @@ export function createServer(
       // Stream: HTTP status is always 200; errors go into the END frame.
       w.status(200)
       w.header('content-type', streamContentFor(kind))
+      const wantsGzip = (req.headers[HEADER_ACCEPT_ENCODING] ?? []).some(
+        (v) => v.split(',').map((s) => s.trim()).includes(ENCODING_GZIP),
+      )
       let wroteEnd = false
       const emit = async (data: Bytes, end: boolean): Promise<void> => {
         if (wroteEnd) return
@@ -69,7 +74,11 @@ export function createServer(
           await w.write(frame(new Uint8Array(0), true))
           return
         }
-        await w.write(frame(data, false))
+        if (wantsGzip && data.length >= COMPRESS_MIN_BYTES) {
+          await w.write(frame(gzipCompress(data), false, DEFAULT_MAX_MESSAGE_BYTES, true))
+        } else {
+          await w.write(frame(data, false))
+        }
       }
       try {
         if (timeoutMs > 0) {

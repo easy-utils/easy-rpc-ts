@@ -245,13 +245,25 @@ export const DEFAULT_MAX_MESSAGE_BYTES = 4 * 1024 * 1024
 /** The Connect protocol-version header. */
 export const HEADER_PROTOCOL_VERSION = 'connect-protocol-version'
 
+/** Compression negotiation headers. */
+export const HEADER_ACCEPT_ENCODING = 'connect-accept-encoding'
+export const HEADER_CONTENT_ENCODING = 'connect-content-encoding'
+export const ENCODING_GZIP = 'gzip'
+/** Compress only messages at or above this size (Connect's compressMinBytes). */
+export const COMPRESS_MIN_BYTES = 1024
+
 /** Current Connect protocol version we speak. */
 export const CONNECT_PROTOCOL_VERSION = '1'
 
 /** Encode a single streaming frame. */
-export function frame(payload: Bytes, endStream = false, maxBytes = DEFAULT_MAX_MESSAGE_BYTES): Bytes {
+export function frame(
+  payload: Bytes,
+  endStream = false,
+  maxBytes = DEFAULT_MAX_MESSAGE_BYTES,
+  compressed = false,
+): Bytes {
   if (payload.length > maxBytes) throw new RPCError(8, `message too large: ${payload.length} > ${maxBytes}`)
-  const flags = endStream ? FLAG_END_STREAM : 0
+  const flags = (endStream ? FLAG_END_STREAM : 0) | (compressed ? FLAG_COMPRESSED : 0)
   const out = new Uint8Array(5 + payload.length)
   out[0] = flags
   const dv = new DataView(out.buffer)
@@ -264,6 +276,8 @@ export function frame(payload: Bytes, endStream = false, maxBytes = DEFAULT_MAX_
 export async function* readFrames(
   chunks: AsyncIterable<Bytes>,
   maxBytes = DEFAULT_MAX_MESSAGE_BYTES,
+  /** Decompress a flagged payload (identity when omitted). */
+  decompress: (payload: Bytes) => Bytes = (p) => p,
 ): AsyncGenerator<{ payload: Bytes; end: boolean }, void> {
   // accumulate raw bytes
   let acc = new Uint8Array(0) as Bytes
@@ -275,8 +289,9 @@ export async function* readFrames(
       const len = new DataView(acc.buffer, acc.byteOffset, acc.byteLength).getUint32(1, false)
       if (len > maxBytes) throw new RPCError(8, `frame too large: ${len} > ${maxBytes}`)
       if (acc.length < 5 + len) break
-      const payload = acc.slice(5, 5 + len)
+      let payload: Bytes = acc.slice(5, 5 + len)
       acc = acc.slice(5 + len)
+      if ((flags & FLAG_COMPRESSED) !== 0) payload = decompress(payload)
       yield { payload, end: (flags & FLAG_END_STREAM) !== 0 }
     }
   }
