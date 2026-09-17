@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file easyrpc/conformance/v1/conformance.proto.
  */
 export const file_easyrpc_conformance_v1_conformance: GenFile = /*@__PURE__*/
-  fileDesc("CihlYXN5cnBjL2NvbmZvcm1hbmNlL3YxL2NvbmZvcm1hbmNlLnByb3RvEhZlYXN5cnBjLmNvbmZvcm1hbmNlLnYxIhwKC0VjaG9SZXF1ZXN0Eg0KBWlucHV0GAEgASgJIh4KDEVjaG9SZXNwb25zZRIOCgZvdXRwdXQYASABKAkiHQoMQ291bnRSZXF1ZXN0Eg0KBWNvdW50GAEgASgFIh4KDUNvdW50UmVzcG9uc2USDQoFaW5kZXgYASABKAUiHgoLRmFpbFJlcXVlc3QSDwoHbWVzc2FnZRgBIAEoCSIaCgxGYWlsUmVzcG9uc2USCgoCb2sYASABKAgiDwoNSGVhbHRoUmVxdWVzdCIqCg5IZWFsdGhSZXNwb25zZRIKCgJvaxgBIAEoCBIMCgRuYW1lGAIgASgJIkcKEVN0cmVhbUZhaWxSZXF1ZXN0EhMKC2VtaXRfYmVmb3JlGAEgASgFEgwKBGNvZGUYAiABKAUSDwoHbWVzc2FnZRgDIAEoCSIjChJTdHJlYW1GYWlsUmVzcG9uc2USDQoFaW5kZXgYASABKAUiIAoPRWNob01ldGFSZXF1ZXN0Eg0KBWlucHV0GAEgASgJIpABChBFY2hvTWV0YVJlc3BvbnNlEg0KBWlucHV0GAEgASgJEkAKBG1ldGEYAiADKAsyMi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2UuTWV0YUVudHJ5GisKCU1ldGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhoKCkJpZ1JlcXVlc3QSDAoEc2l6ZRgBIAEoBSIbCgtCaWdSZXNwb25zZRIMCgRzaXplGAIgASgFMqAGChJDb25mb3JtYW5jZVNlcnZpY2USawoGSGVhbHRoEiUuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5IZWFsdGhSZXF1ZXN0GiYuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5IZWFsdGhSZXNwb25zZSISgtPkkwIMEgovdjEvaGVhbHRoEmYKBEVjaG8SIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9SZXF1ZXN0GiQuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvUmVzcG9uc2UiE4LT5JMCDSIIL3YxL2VjaG86ASoSbAoFQ291bnQSJC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkNvdW50UmVxdWVzdBolLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRSZXNwb25zZSIUgtPkkwIOIgkvdjEvY291bnQ6ASowARJmCgRGYWlsEiMuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5GYWlsUmVxdWVzdBokLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRmFpbFJlc3BvbnNlIhOC0+STAg0iCC92MS9mYWlsOgEqEoEBCgpTdHJlYW1GYWlsEikuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5TdHJlYW1GYWlsUmVxdWVzdBoqLmVhc3lycGMuY29uZm9ybWFuY2UudjEuU3RyZWFtRmFpbFJlc3BvbnNlIhqC0+STAhQiDy92MS9zdHJlYW0tZmFpbDoBKjABEncKCEVjaG9NZXRhEicuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvTWV0YVJlcXVlc3QaKC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2UiGILT5JMCEiINL3YxL2VjaG8tbWV0YToBKhJiCgNCaWcSIi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkJpZ1JlcXVlc3QaIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkJpZ1Jlc3BvbnNlIhKC0+STAgwiBy92MS9iaWc6ASpCQFo+Z2l0aHViLmNvbS9lYXN5LXV0aWxzL2Vhc3ktcnBjLWdvL2NvbmZvcm1hbmNlL3YxO2NvbmZvcm1hbmNldjFiBnByb3RvMw", [file_google_api_annotations]);
+  fileDesc("CihlYXN5cnBjL2NvbmZvcm1hbmNlL3YxL2NvbmZvcm1hbmNlLnByb3RvEhZlYXN5cnBjLmNvbmZvcm1hbmNlLnYxIhwKC0VjaG9SZXF1ZXN0Eg0KBWlucHV0GAEgASgJIh4KDEVjaG9SZXNwb25zZRIOCgZvdXRwdXQYASABKAkiHQoMQ291bnRSZXF1ZXN0Eg0KBWNvdW50GAEgASgFIh4KDUNvdW50UmVzcG9uc2USDQoFaW5kZXgYASABKAUiHgoLRmFpbFJlcXVlc3QSDwoHbWVzc2FnZRgBIAEoCSIaCgxGYWlsUmVzcG9uc2USCgoCb2sYASABKAgiDwoNSGVhbHRoUmVxdWVzdCIqCg5IZWFsdGhSZXNwb25zZRIKCgJvaxgBIAEoCBIMCgRuYW1lGAIgASgJIkcKEVN0cmVhbUZhaWxSZXF1ZXN0EhMKC2VtaXRfYmVmb3JlGAEgASgFEgwKBGNvZGUYAiABKAUSDwoHbWVzc2FnZRgDIAEoCSIjChJTdHJlYW1GYWlsUmVzcG9uc2USDQoFaW5kZXgYASABKAUiIAoPRWNob01ldGFSZXF1ZXN0Eg0KBWlucHV0GAEgASgJIpABChBFY2hvTWV0YVJlc3BvbnNlEg0KBWlucHV0GAEgASgJEkAKBG1ldGEYAiADKAsyMi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2UuTWV0YUVudHJ5GisKCU1ldGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhoKCkJpZ1JlcXVlc3QSDAoEc2l6ZRgBIAEoBSIbCgtCaWdSZXNwb25zZRIMCgRzaXplGAIgASgFIl0KEkZhaWxEZXRhaWxzUmVxdWVzdBIMCgRjb2RlGAEgASgFEg8KB21lc3NhZ2UYAiABKAkSEwoLZGV0YWlsX3R5cGUYAyABKAkSEwoLZGV0YWlsX3RleHQYBCABKAkiIQoTRmFpbERldGFpbHNSZXNwb25zZRIKCgJvaxgBIAEoCCJ4ChhTdHJlYW1GYWlsRGV0YWlsc1JlcXVlc3QSEwoLZW1pdF9iZWZvcmUYASABKAUSDAoEY29kZRgCIAEoBRIPCgdtZXNzYWdlGAMgASgJEhMKC2RldGFpbF90eXBlGAQgASgJEhMKC2RldGFpbF90ZXh0GAUgASgJIioKGVN0cmVhbUZhaWxEZXRhaWxzUmVzcG9uc2USDQoFaW5kZXgYASABKAUyxwgKEkNvbmZvcm1hbmNlU2VydmljZRJrCgZIZWFsdGgSJS5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkhlYWx0aFJlcXVlc3QaJi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkhlYWx0aFJlc3BvbnNlIhKC0+STAgwSCi92MS9oZWFsdGgSZgoERWNobxIjLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRWNob1JlcXVlc3QaJC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9SZXNwb25zZSITgtPkkwINOgEqIggvdjEvZWNobxJsCgVDb3VudBIkLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRSZXF1ZXN0GiUuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5Db3VudFJlc3BvbnNlIhSC0+STAg46ASoiCS92MS9jb3VudDABEmYKBEZhaWwSIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkZhaWxSZXF1ZXN0GiQuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5GYWlsUmVzcG9uc2UiE4LT5JMCDToBKiIIL3YxL2ZhaWwSgQEKClN0cmVhbUZhaWwSKS5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLlN0cmVhbUZhaWxSZXF1ZXN0GiouZWFzeXJwYy5jb25mb3JtYW5jZS52MS5TdHJlYW1GYWlsUmVzcG9uc2UiGoLT5JMCFDoBKiIPL3YxL3N0cmVhbS1mYWlsMAESdwoIRWNob01ldGESJy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVxdWVzdBooLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRWNob01ldGFSZXNwb25zZSIYgtPkkwISOgEqIg0vdjEvZWNoby1tZXRhEmIKA0JpZxIiLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQmlnUmVxdWVzdBojLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQmlnUmVzcG9uc2UiEoLT5JMCDDoBKiIHL3YxL2JpZxKDAQoLRmFpbERldGFpbHMSKi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkZhaWxEZXRhaWxzUmVxdWVzdBorLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRmFpbERldGFpbHNSZXNwb25zZSIbgtPkkwIVOgEqIhAvdjEvZmFpbC1kZXRhaWxzEp4BChFTdHJlYW1GYWlsRGV0YWlscxIwLmVhc3lycGMuY29uZm9ybWFuY2UudjEuU3RyZWFtRmFpbERldGFpbHNSZXF1ZXN0GjEuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5TdHJlYW1GYWlsRGV0YWlsc1Jlc3BvbnNlIiKC0+STAhw6ASoiFy92MS9zdHJlYW0tZmFpbC1kZXRhaWxzMAFCQFo+Z2l0aHViLmNvbS9lYXN5LXV0aWxzL2Vhc3ktcnBjLWdvL2NvbmZvcm1hbmNlL3YxO2NvbmZvcm1hbmNldjFiBnByb3RvMw", [file_google_api_annotations]);
 
 /**
  * @generated from message easyrpc.conformance.v1.EchoRequest
@@ -272,6 +272,113 @@ export const BigResponseSchema: GenMessage<BigResponse> = /*@__PURE__*/
   messageDesc(file_easyrpc_conformance_v1_conformance, 13);
 
 /**
+ * @generated from message easyrpc.conformance.v1.FailDetailsRequest
+ */
+export type FailDetailsRequest = Message<"easyrpc.conformance.v1.FailDetailsRequest"> & {
+  /**
+   * @generated from field: int32 code = 1;
+   */
+  code: number;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+
+  /**
+   * ErrorDetail.type (a type URL)
+   *
+   * @generated from field: string detail_type = 3;
+   */
+  detailType: string;
+
+  /**
+   * ErrorDetail.value bytes (UTF-8 text for testing)
+   *
+   * @generated from field: string detail_text = 4;
+   */
+  detailText: string;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.FailDetailsRequest.
+ * Use `create(FailDetailsRequestSchema)` to create a new message.
+ */
+export const FailDetailsRequestSchema: GenMessage<FailDetailsRequest> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 14);
+
+/**
+ * @generated from message easyrpc.conformance.v1.FailDetailsResponse
+ */
+export type FailDetailsResponse = Message<"easyrpc.conformance.v1.FailDetailsResponse"> & {
+  /**
+   * @generated from field: bool ok = 1;
+   */
+  ok: boolean;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.FailDetailsResponse.
+ * Use `create(FailDetailsResponseSchema)` to create a new message.
+ */
+export const FailDetailsResponseSchema: GenMessage<FailDetailsResponse> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 15);
+
+/**
+ * @generated from message easyrpc.conformance.v1.StreamFailDetailsRequest
+ */
+export type StreamFailDetailsRequest = Message<"easyrpc.conformance.v1.StreamFailDetailsRequest"> & {
+  /**
+   * @generated from field: int32 emit_before = 1;
+   */
+  emitBefore: number;
+
+  /**
+   * @generated from field: int32 code = 2;
+   */
+  code: number;
+
+  /**
+   * @generated from field: string message = 3;
+   */
+  message: string;
+
+  /**
+   * @generated from field: string detail_type = 4;
+   */
+  detailType: string;
+
+  /**
+   * @generated from field: string detail_text = 5;
+   */
+  detailText: string;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.StreamFailDetailsRequest.
+ * Use `create(StreamFailDetailsRequestSchema)` to create a new message.
+ */
+export const StreamFailDetailsRequestSchema: GenMessage<StreamFailDetailsRequest> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 16);
+
+/**
+ * @generated from message easyrpc.conformance.v1.StreamFailDetailsResponse
+ */
+export type StreamFailDetailsResponse = Message<"easyrpc.conformance.v1.StreamFailDetailsResponse"> & {
+  /**
+   * @generated from field: int32 index = 1;
+   */
+  index: number;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.StreamFailDetailsResponse.
+ * Use `create(StreamFailDetailsResponseSchema)` to create a new message.
+ */
+export const StreamFailDetailsResponseSchema: GenMessage<StreamFailDetailsResponse> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 17);
+
+/**
  * @generated from service easyrpc.conformance.v1.ConformanceService
  */
 export const ConformanceService: GenService<{
@@ -336,6 +443,26 @@ export const ConformanceService: GenService<{
     methodKind: "unary";
     input: typeof BigRequestSchema;
     output: typeof BigResponseSchema;
+  },
+  /**
+   * Fail the unary call with an error carrying structured details.
+   *
+   * @generated from rpc easyrpc.conformance.v1.ConformanceService.FailDetails
+   */
+  failDetails: {
+    methodKind: "unary";
+    input: typeof FailDetailsRequestSchema;
+    output: typeof FailDetailsResponseSchema;
+  },
+  /**
+   * Emit N frames, then fail the stream with an error carrying details.
+   *
+   * @generated from rpc easyrpc.conformance.v1.ConformanceService.StreamFailDetails
+   */
+  streamFailDetails: {
+    methodKind: "server_streaming";
+    input: typeof StreamFailDetailsRequestSchema;
+    output: typeof StreamFailDetailsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_easyrpc_conformance_v1_conformance, 0);

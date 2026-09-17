@@ -99,7 +99,7 @@ export function createServer(
         const err = e instanceof RPCError ? e : new RPCError(13, String(e))
         if (!wroteEnd) {
           wroteEnd = true
-          await w.write(frame(encodeEndStream(err.code, err.message), true))
+          await w.write(frame(encodeEndStream(err.code, err.message, undefined, err.details), true))
         }
         await w.finish()
         return
@@ -135,7 +135,7 @@ async function fail(w: ResponseWriter, err: RPCError, _kind: ContentKind): Promi
   // accepted by clients for backward compatibility.
   w.status(httpStatus(err.code))
   w.header('content-type', 'application/json')
-  await w.write(encodeErrorJson(err.code, err.message))
+  await w.write(encodeErrorJson(err.code, err.message, err.details))
   await w.finish()
 }
 

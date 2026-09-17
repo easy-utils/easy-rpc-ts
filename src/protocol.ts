@@ -145,9 +145,48 @@ export interface Response {
   error?: RPCError
 }
 
+/**
+ * A structured error detail (spec §4.1, aligned with Connect Error Details /
+ * gRPC google.rpc status details). `type` is a type URL; `value` is opaque
+ * bytes (typically an encoded protobuf message).
+ */
+export interface ErrorDetail {
+  type: string
+  value: Bytes
+}
+
+// Runtime-agnostic base64 (no btoa/Buffer dependency; details are small).
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+function base64Encode(b: Bytes): string {
+  let out = ''
+  for (let i = 0; i < b.length; i += 3) {
+    const n = (b[i]! << 16) | ((b[i + 1] ?? 0) << 8) | (b[i + 2] ?? 0)
+    out += B64[n >> 18] + B64[(n >> 12) & 63] + (i + 1 < b.length ? B64[(n >> 6) & 63] : '=') + (i + 2 < b.length ? B64[n & 63] : '=')
+  }
+  return out
+}
+function base64Decode(s: string): Bytes {
+  const clean = s.replace(/[^A-Za-z0-9+/]/g, '')
+  const out = new Uint8Array((clean.length * 3) >> 2)
+  let o = 0
+  for (let i = 0; i < clean.length; i += 4) {
+    const idx = [0, 1, 2, 3].map((k) => B64.indexOf(clean[i + k] ?? ''))
+    const n = (idx[0]! << 18) | (idx[1]! << 12) | ((idx[2]! < 0 ? 0 : idx[2]!) << 6) | (idx[3]! < 0 ? 0 : idx[3]!)
+    out[o++] = (n >> 16) & 0xff
+    if (idx[2]! >= 0) out[o++] = (n >> 8) & 0xff
+    if (idx[3]! >= 0) out[o++] = n & 0xff
+  }
+  return out.subarray(0, o)
+}
+
 /** Wire-level error with a Connect code. */
 export class RPCError extends Error {
-  constructor(public code: number, message: string) {
+  constructor(
+    public code: number,
+    message: string,
+    /** Optional structured details (spec §4.1); opaque to the wire layer. */
+    public details?: ErrorDetail[],
+  ) {
     super(message)
     this.name = 'RPCError'
   }
@@ -212,13 +251,34 @@ export function codeFromString(name: string): number {
 export interface ConnectErrorBody {
   code: string
   message: string
-  details?: unknown[]
+  details?: { type: string; value: string }[]
+}
+
+/** Serialize details to their wire shape (base64 value strings). */
+function encodeDetails(details: ErrorDetail[]): { type: string; value: string }[] {
+  return details.map((d) => ({ type: d.type, value: base64Encode(d.value) }))
+}
+
+/** Parse the wire details array; skips malformed entries (matrix M7). */
+function decodeDetails(v: unknown): ErrorDetail[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  const out: ErrorDetail[] = []
+  for (const el of v) {
+    if (typeof el !== 'object' || el === null) continue
+    const t = (el as { type?: unknown }).type
+    const val = (el as { value?: unknown }).value
+    if (typeof t !== 'string' || t === '' || typeof val !== 'string' || val === '') continue
+    // Strict base64: invalid chars / bad padding => skip the entry (M7).
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(val) || (val.length & 3) !== 0) continue
+    out.push({ type: t, value: base64Decode(val) })
+  }
+  return out.length > 0 ? out : undefined
 }
 
 /** Build the Connect unary error body from a code + message. */
-export function encodeErrorJson(code: number, message: string, details?: unknown[]): Bytes {
+export function encodeErrorJson(code: number, message: string, details?: ErrorDetail[]): Bytes {
   const body: ConnectErrorBody = { code: codeToString(code), message }
-  if (details !== undefined && details.length > 0) body.details = details
+  if (details !== undefined && details.length > 0) body.details = encodeDetails(details)
   return new TextEncoder().encode(JSON.stringify(body))
 }
 
@@ -237,14 +297,27 @@ export function decodeErrorJson(
   if (hdrCode !== undefined) {
     const c = Number.parseInt(hdrCode, 10)
     if (Number.isFinite(c)) {
-      return new RPCError(c, headers['connect-error']?.[0] ?? '')
+      // The header carries the exact code; the JSON body (when present) may
+      // still carry details — merge them (details never travel in headers).
+      let details: ErrorDetail[] | undefined
+      if (body.length > 0) {
+        try {
+          const o = JSON.parse(new TextDecoder().decode(body)) as ConnectErrorBody
+          if (o !== null && typeof o === 'object') details = decodeDetails(o.details)
+        } catch { /* not JSON */ }
+      }
+      return new RPCError(c, headers['connect-error']?.[0] ?? '', details)
     }
   }
   if (body.length > 0) {
     try {
       const obj = JSON.parse(new TextDecoder().decode(body)) as ConnectErrorBody
       if (obj !== null && typeof obj === 'object' && typeof obj.code === 'string') {
-        return new RPCError(codeFromString(obj.code), typeof obj.message === 'string' ? obj.message : '')
+        return new RPCError(
+          codeFromString(obj.code),
+          typeof obj.message === 'string' ? obj.message : '',
+          decodeDetails(obj.details),
+        )
       }
     } catch {
       /* fall through */
@@ -330,6 +403,9 @@ export async function* readFrames(
       yield { payload, end: (flags & FLAG_END_STREAM) !== 0 }
     }
   }
+  // A partial frame at EOF means the body was truncated mid-frame (matrix M8):
+  // treat it as corruption, never as a clean end.
+  if (acc.length > 0) throw new RPCError(13, `truncated frame: ${acc.length} trailing bytes`)
 }
 
 function concat(a: Bytes, b: Bytes): Bytes {
@@ -456,10 +532,15 @@ export function encodeEndStream(
   code: number,
   message: string,
   metadata?: Headers,
+  details?: ErrorDetail[],
 ): Bytes {
-  const obj: { error?: { code: string; message: string }; metadata?: Headers } = {}
+  const obj: {
+    error?: { code: string; message: string; details?: { type: string; value: string }[] }
+    metadata?: Headers
+  } = {}
   if (code !== 0) {
     obj.error = { code: codeToString(code), message }
+    if (details !== undefined && details.length > 0) obj.error.details = encodeDetails(details)
   }
   if (metadata !== undefined && Object.keys(metadata).length > 0) {
     obj.metadata = metadata
@@ -470,7 +551,12 @@ export function encodeEndStream(
 
 /** Decode an END frame payload (Connect end-stream JSON). Returns null for a
  *  clean end (empty payload) or malformed input. */
-export function decodeEndStream(payload: Bytes): { code: number; message: string; metadata?: Headers } | null {
+export function decodeEndStream(payload: Bytes): {
+  code: number
+  message: string
+  metadata?: Headers
+  details?: ErrorDetail[]
+} | null {
   if (payload.length === 0) return null
   let obj: unknown
   try {
@@ -490,9 +576,11 @@ export function decodeEndStream(payload: Bytes): { code: number; message: string
   }
   const name = (err as { code?: unknown }).code
   const message = (err as { message?: unknown }).message
+  const details = decodeDetails((err as { details?: unknown }).details)
   return {
     code: typeof name === 'string' ? codeFromString(name) : 2,
     message: typeof message === 'string' ? message : '',
+    ...(details !== undefined ? { details } : {}),
     ...(metadata !== undefined ? { metadata } : {}),
   }
 }
@@ -505,7 +593,7 @@ export async function* streamPayloads(
   for await (const f of framed) {
     if (f.end) {
       const err = decodeEndStream(f.payload)
-      if (err !== null && err.code !== 0) throw new RPCError(err.code, err.message)
+      if (err !== null && err.code !== 0) throw new RPCError(err.code, err.message, err.details)
       return
     }
     yield f.payload
