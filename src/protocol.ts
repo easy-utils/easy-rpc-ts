@@ -1,6 +1,7 @@
 // easy-rpc TypeScript core: zero-runtime-bindings Transport interface + the
-// Connect wire protocol (unary + server-stream). Bridges (fetch/node) adapt a
-// concrete HTTP runtime to Transport; protocol logic is runtime-agnostic.
+// Connect wire protocol subset (unary + server-stream, proto messages only).
+// Bridges (fetch/node) adapt a concrete HTTP runtime to Transport; protocol
+// logic (framing, errors, trailers, content-type) is runtime-agnostic.
 
 /** Multi-value headers. */
 export type Bytes = Uint8Array<ArrayBufferLike>
@@ -15,28 +16,9 @@ export function withMetadata(metadata: Headers, req: Request): Request {
 }
 
 /**
- * @deprecated Use `createInterceptorTransport([metadataInterceptor(md)], transport)`
- * instead. Kept for one release; the interceptor form composes with deadlines,
- * retry, and logging, and does not depend on the adapter.
- */
-export function createMetadataTransport(metadata: Headers, transport: Transport): Transport {
-  return {
-    async send(req: Request): Promise<Response> {
-      return transport.send(withMetadata(metadata, req))
-    },
-    async openStream(req: Request): Promise<Stream> {
-      return transport.openStream(withMetadata(metadata, req))
-    },
-  }
-}
-
-/**
  * A call interceptor. It wraps the next unary/stream invocation and may mutate
  * the request (attach auth/metadata), observe the response, short-circuit, or
  * impose a deadline. `next` performs the actual transport call.
- *
- * This is the ONE built-in extension point: auth, retry, logging, and timeouts
- * are all written as interceptors instead of per-transport wrappers.
  */
 export interface Interceptor {
   unary?(req: Request, next: (req: Request) => Promise<Response>): Promise<Response>
@@ -91,7 +73,7 @@ export function metadataInterceptor(metadata: Headers): Interceptor {
 /**
  * Built-in interceptor: impose a per-call deadline.
  *
- * It sets the Connect `connect-timeout-ms` header (server-side deadline) AND a
+ * It sets the Connect `Connect-Timeout-Ms` header (server-side deadline) AND a
  * local AbortSignal that adapters honour, so the client cancels even when the
  * server cannot enforce the deadline. The signal is cleared on completion.
  */
@@ -125,10 +107,9 @@ export function timeoutInterceptor(timeoutMs: number): Interceptor {
   }
 }
 
-/** A normalized RPC request. */
+/** A normalized RPC request. All calls are POST (no method field). */
 export interface Request {
   url: string
-  method: string // GET / POST / ...
   headers: Headers
   body: Bytes | undefined
   /** Local cancellation channel. Adapters that support abort (fetch signal,
@@ -136,11 +117,12 @@ export interface Request {
   signal?: AbortSignal
 }
 
-/** A normalized response. */
+/** A normalized unary response. */
 export interface Response {
   status: number
   headers: Headers
   body: Bytes
+  /** Trailing metadata (demuxed from `trailer-*` response headers by the bridge). */
   trailers?: Headers
   error?: RPCError
 }
@@ -192,8 +174,11 @@ export class RPCError extends Error {
   }
 }
 
-/** Server-stream response: async iterable of raw message bytes + cancel(). */
+/** Server-stream response: async iterable of raw message bytes, plus the
+ *  trailing metadata (available after the iterator completes) and cancel(). */
 export interface Stream extends AsyncIterable<Bytes> {
+  /** Trailing metadata from the END frame. Empty until the stream has ended. */
+  trailers(): Headers
   cancel(): void
 }
 
@@ -201,6 +186,13 @@ export interface Stream extends AsyncIterable<Bytes> {
 export interface Transport {
   send(req: Request): Promise<Response>
   openStream(req: Request): Promise<Stream>
+}
+
+/** Client-side typed server-stream: message iterator + trailing metadata. */
+export interface ServerStream<T> extends AsyncIterable<T> {
+  /** Trailing metadata from the END frame. Empty until the stream has ended. */
+  trailers(): Headers
+  cancel(): void
 }
 
 /** Maps Connect code to HTTP status. */
@@ -223,8 +215,8 @@ export function httpStatus(code: number): number {
   }
 }
 
-/// Connect error-code names (wire-stable strings used on the JSON error
-/// payloads). Mirrors @connectrpc/connect `codeToString` / `codeFromString`.
+/** Connect error-code names (wire-stable strings used on the JSON error
+ *  payloads / end-stream). Mirrors @connectrpc/connect. */
 const CODE_NAMES: Record<number, string> = {
   0: 'ok', 1: 'canceled', 2: 'unknown', 3: 'invalid_argument',
   4: 'deadline_exceeded', 5: 'not_found', 6: 'already_exists',
@@ -353,15 +345,21 @@ export const DEFAULT_MAX_MESSAGE_BYTES = 4 * 1024 * 1024
 /** The Connect protocol-version header. */
 export const HEADER_PROTOCOL_VERSION = 'connect-protocol-version'
 
-/** Compression negotiation headers. */
-export const HEADER_ACCEPT_ENCODING = 'connect-accept-encoding'
-export const HEADER_CONTENT_ENCODING = 'connect-content-encoding'
+/** Compression negotiation headers (Connect naming). */
+export const HEADER_STREAM_ACCEPT_ENCODING = 'connect-accept-encoding'
+export const HEADER_STREAM_CONTENT_ENCODING = 'connect-content-encoding'
+export const HEADER_ACCEPT_ENCODING = 'accept-encoding'
+export const HEADER_CONTENT_ENCODING = 'content-encoding'
 export const ENCODING_GZIP = 'gzip'
 /** Compress only messages at or above this size (Connect's compressMinBytes). */
 export const COMPRESS_MIN_BYTES = 1024
 
 /** Current Connect protocol version we speak. */
 export const CONNECT_PROTOCOL_VERSION = '1'
+
+/** Content types for the two shapes (proto only). */
+export const CONTENT_TYPE_UNARY = 'application/proto'
+export const CONTENT_TYPE_STREAM = 'application/connect+proto'
 
 /** Encode a single streaming frame. */
 export function frame(
@@ -449,15 +447,14 @@ export function urlFor(pkg: string, service: string, method: string): string {
   return `/${pkg}.${service}/${method}`
 }
 
-/** MethodSpec mirrors what the generator emits. */
+/** MethodSpec mirrors what the generator emits (no HTTP verb / body binding:
+ *  easy-rpc v2 is POST-only with the gRPC-style path). */
 export interface MethodSpec {
   service: string
   name: string
   path: string
-  httpMethod: string
   clientStream: boolean
   serverStream: boolean
-  body: string
 }
 
 /** ServiceDesc is the runtime descriptor for a generated service. */
@@ -466,35 +463,76 @@ export interface ServiceDesc {
   methods: MethodSpec[]
 }
 
-// ---- JSON helpers ----
-const enc = new TextEncoder()
-const dec = new TextDecoder()
-export function toBytes(v: unknown): Bytes {
-  return enc.encode(typeof v === 'string' ? v : JSON.stringify(v))
-}
-export function fromBytesToJson(b: Bytes): unknown {
-  return JSON.parse(dec.decode(b))
+// ---- content type ----
+
+/** True when the header value is the unary proto content type. */
+export function isUnaryContentType(v: string): boolean {
+  return v.split(';')[0]!.trim().toLowerCase() === CONTENT_TYPE_UNARY
 }
 
-// ---- content negotiation (shared by client + server; no runtime deps) ----
-export type ContentKind = 'proto' | 'json'
+/** True when the header value is the streaming proto content type. */
+export function isStreamContentType(v: string): boolean {
+  return v.split(';')[0]!.trim().toLowerCase() === CONTENT_TYPE_STREAM
+}
+
+// ---- trailer mux/demux (unary: `trailer-` response-header prefix) ----
+
+const TRAILER_PREFIX = 'trailer-'
+
+/** Split response headers into (headers, trailers) by the `trailer-` prefix.
+ *  Case-insensitive, matching Connect. */
+export function demuxTrailers(headers: Headers): { headers: Headers; trailers: Headers } {
+  const h: Headers = {}
+  const t: Headers = {}
+  for (const [k, v] of Object.entries(headers)) {
+    const lk = k.toLowerCase()
+    if (lk.startsWith(TRAILER_PREFIX)) {
+      t[lk.slice(TRAILER_PREFIX.length)] = v
+    } else {
+      h[k] = v
+    }
+  }
+  return { headers: h, trailers: t }
+}
+
+/** Merge a trailer map into response headers using the `trailer-` prefix. */
+export function muxTrailers(headers: Headers, trailers: Headers): Headers {
+  const out: Headers = { ...headers }
+  for (const [k, v] of Object.entries(trailers)) {
+    out[`${TRAILER_PREFIX}${k.toLowerCase()}`] = v
+  }
+  return out
+}
+
+// ---- server dispatch surface ----
+
+/**
+ * Per-RPC context handed to generated handlers. Provides the request metadata
+ * and a channel to set trailing metadata.
+ */
+export interface HandlerContext {
+  /** Request metadata (HTTP headers). */
+  readonly headers: Headers
+  /** Set a trailing-metadata entry. For unary RPCs it is emitted as a
+   *  `trailer-<key>` response header; for server-streams it is carried in the
+   *  END frame's end-stream JSON `metadata`. */
+  setTrailer(key: string, value: string): void
+}
 
 export interface ServiceHandlers {
-  unary: Record<string, (input: Bytes, kind: ContentKind) => Promise<Bytes>>
-  stream: Record<string, (input: Bytes, kind: ContentKind, emit: (data: Bytes, end: boolean) => Promise<void>) => Promise<void>>
+  unary: Record<string, (input: Bytes, ctx: HandlerContext) => Promise<Bytes>>
+  stream: Record<string, (input: Bytes, ctx: HandlerContext, emit: (data: Bytes, end: boolean) => Promise<void>) => Promise<void>>
 }
 
 /**
  * Server-side response sink. The dispatch core PUSHES bytes into a writer
  * instead of returning a buffered body, so server-stream responses are written
- * frame-by-frame and flushed by the runtime adapter (node:http, node:http2,
- * fetch/Web, ...) as they are produced. This is the whole point of the easy-rpc
- * server model: never buffer a stream.
+ * frame-by-frame and flushed by the runtime adapter as they are produced.
  *
  * Connect semantics: a server-stream response is always HTTP 200; a failure is
  * carried in the END frame, never as an HTTP status. Unary responses are fully
  * resolved before `status`/`write` are called, so a thrown error still surfaces
- * as a real non-200 status (the core maps it before the first write).
+ * as a real non-200 status.
  */
 export interface ResponseWriter {
   /** Set the HTTP status (called before the first `write`). */
@@ -511,26 +549,16 @@ export interface ResponseWriter {
  *  response into the writer. */
 export type ServerDispatch = (req: Request, w: ResponseWriter) => Promise<void>
 
-/** Method shape the server dispatches on. */
+/** Method shape the server dispatches on (all POST, path-keyed). */
 export interface ServerMethodSpec {
   path: string
   name: string
   serverStream: boolean
 }
 
-export function detectKind(req: Request): ContentKind {
-  const ct = req.headers['content-type']?.[0] ?? ''
-  const ac = req.headers['accept']?.[0] ?? ''
-  // Streaming JSON arrives as application/connect+json — both prefixes are
-  // JSON kinds (spec §2).
-  const isJson = (v: string) => v.startsWith('application/json') || v.startsWith('application/connect+json')
-  if (isJson(ct) || isJson(ac)) return 'json'
-  return 'proto'
-}
-
-/** Encode an error into a stream END frame payload, in the Connect
- *  end-stream JSON shape: `{"error":{"code":"<name>","message":"..."}}`.
- *  A clean (non-error) end is an empty payload. */
+/** Encode an error/trailer into a stream END frame payload (Connect end-stream
+ *  JSON). A clean end with no metadata still serializes as `{}` — Connect's
+ *  parser requires valid JSON on the END frame. */
 export function encodeEndStream(
   code: number,
   message: string,
@@ -545,10 +573,11 @@ export function encodeEndStream(
     obj.error = { code: codeToString(code), message }
     if (details !== undefined && details.length > 0) obj.error.details = encodeDetails(details)
   }
-  if (metadata !== undefined && Object.keys(metadata).length > 0) {
-    obj.metadata = metadata
+  if (metadata !== undefined) {
+    const md: Headers = {}
+    for (const [k, v] of Object.entries(metadata)) if (v.length > 0) md[k] = v
+    if (Object.keys(md).length > 0) obj.metadata = md
   }
-  if (obj.error === undefined && obj.metadata === undefined) return new Uint8Array(0)
   return new TextEncoder().encode(JSON.stringify(obj))
 }
 
@@ -588,22 +617,30 @@ export function decodeEndStream(payload: Bytes): {
   }
 }
 
-/** Turn a framed response into a payload stream. A non-empty END payload is a
- *  Connect end-stream error: throw it instead of silently ending. A stream
- *  that ends WITHOUT an END frame is truncated (fault matrix F2): the Connect
- *  protocol requires every server-stream to terminate with an END frame. */
-export async function* streamPayloads(
+/**
+ * Turn a framed response into a payload stream, capturing trailing metadata.
+ * A non-empty END payload with `error` throws; `metadata` is captured for
+ * `trailers()`. A stream that ends WITHOUT an END frame is truncated (F2).
+ */
+export function streamPayloads(
   framed: AsyncIterable<{ payload: Bytes; end: boolean }>,
-): AsyncGenerator<Bytes, void> {
-  let sawEnd = false
-  for await (const f of framed) {
-    if (f.end) {
-      sawEnd = true
-      const err = decodeEndStream(f.payload)
-      if (err !== null && err.code !== 0) throw new RPCError(err.code, err.message, err.details)
-      return
+): { payloads: AsyncGenerator<Bytes, void>; trailers: () => Headers } {
+  let trailers: Headers = {}
+  const payloads = (async function* (): AsyncGenerator<Bytes, void> {
+    let sawEnd = false
+    for await (const f of framed) {
+      if (f.end) {
+        sawEnd = true
+        const es = decodeEndStream(f.payload)
+        if (es !== null) {
+          if (es.metadata !== undefined) trailers = es.metadata
+          if (es.code !== 0) throw new RPCError(es.code, es.message, es.details)
+        }
+        return
+      }
+      yield f.payload
     }
-    yield f.payload
-  }
-  if (!sawEnd) throw new RPCError(13, 'stream ended without END frame')
+    if (!sawEnd) throw new RPCError(13, 'stream ended without END frame')
+  })()
+  return { payloads, trailers: () => trailers }
 }

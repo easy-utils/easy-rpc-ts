@@ -1,29 +1,44 @@
 import { createServer, nodeServer } from './server.js'
 import { create } from '@bufbuild/protobuf'
-import { CountResponseSchema, EchoRequestSchema, EchoResponseSchema, HealthResponseSchema, FailResponseSchema, StreamFailResponseSchema, EchoMetaResponseSchema, BigResponseSchema, StreamFailDetailsResponseSchema } from './easyrpc/conformance/v1/conformance_pb.js'
+import {
+  BigResponseSchema,
+  CountResponseSchema,
+  CountTrailerResponseSchema,
+  EchoMetaResponseSchema,
+  EchoResponseSchema,
+  EchoTrailerResponseSchema,
+  FailResponseSchema,
+  HealthResponseSchema,
+  StreamFailDetailsResponseSchema,
+  StreamFailResponseSchema,
+} from './easyrpc/conformance/v1/conformance_pb.js'
 import { ConformanceServiceHandlers, methodSpecs } from './easyrpc/conformance/v1/conformance_easyrpc.js'
-import { RPCError, Headers } from './protocol.js'
+import { RPCError } from './protocol.js'
 
 const port = Number(process.env.PORT) || 18899
 const impl: any = {
   health: async () => create(HealthResponseSchema, { ok: true, name: 'conformance' }),
   echo: async (req: any) => create(EchoResponseSchema, { output: 'echo:' + req.input }),
-  count: async () => {
+  count: async (req: any) => {
+    const n = req.count > 0 ? req.count : 3
     return {
       async *[Symbol.asyncIterator]() {
-        for (let i = 0; i < 3; i++) yield create(CountResponseSchema, { index: i } as any)
+        for (let i = 0; i < n; i++) yield create(CountResponseSchema, { index: i } as any)
       },
     }
   },
-  fail: async () => create(FailResponseSchema, { ok: true }),
+  fail: async (req: any) => create(FailResponseSchema, { ok: req.message === '' }),
   streamFail: async (in_: any) => ({
     async *[Symbol.asyncIterator]() {
       for (let i = 0; i < (in_.emitBefore ?? 0); i++) yield create(StreamFailResponseSchema, { index: i } as any)
       throw new RPCError(Number(in_.code ?? 13), String(in_.message ?? 'boom'))
     },
   }),
-  echoMeta: async (in_: any, md?: Headers) =>
-    create(EchoMetaResponseSchema, { input: in_.input, meta: { 'x-test': md?.['x-test']?.[0] ?? '' } } as any),
+  echoMeta: async (in_: any, ctx: any) =>
+    create(EchoMetaResponseSchema, {
+      input: in_.input,
+      meta: { 'x-test': ctx?.headers?.['x-test']?.[0] ?? '', authorization: ctx?.headers?.['authorization']?.[0] ?? '' },
+    } as any),
   big: async (in_: any) => create(BigResponseSchema, { size: in_.size } as any),
   failDetails: async (in_: any) => {
     throw new RPCError(Number(in_.code ?? 8), String(in_.message ?? 'limited'), [
@@ -38,12 +53,21 @@ const impl: any = {
       ])
     },
   }),
+  echoTrailer: async (in_: any, ctx: any) => {
+    ctx?.setTrailer?.('x-trl', 'unary-' + String(in_.input ?? ''))
+    return create(EchoTrailerResponseSchema, { output: 'trailer:' + String(in_.input ?? '') } as any)
+  },
+  countTrailer: async (in_: any, ctx: any) => {
+    ctx?.setTrailer?.('x-ctrailer', 'done-' + String(in_.count ?? ''))
+    const n = in_.count > 0 ? in_.count : 3
+    return {
+      async *[Symbol.asyncIterator]() {
+        for (let i = 0; i < n; i++) yield create(CountTrailerResponseSchema, { index: i } as any)
+      },
+    }
+  },
 }
 const handlers = ConformanceServiceHandlers(impl)
-// Route straight off the generated specs so the server always serves the
-// full conformance surface (no hand-maintained path list).
 const dispatch = createServer(methodSpecs as any, handlers)
 
-// Conformance server: HTTP/1 push server (streams are written + flushed
-// frame-by-frame). h2c is available via the library's http2Server export.
 nodeServer(dispatch).listen(port, '127.0.0.1', () => console.log('ts on', port))

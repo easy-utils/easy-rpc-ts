@@ -1,7 +1,8 @@
 // fetch bridge for browsers. Adapts window.fetch to the Transport interface.
+// All easy-rpc calls are POST (spec §0); the bridge always uses POST.
 import type { Request, Response, Stream, Transport } from './protocol.js'
 import { gzipDecompress } from './compression.js'
-import { readFrames, streamPayloads, decodeErrorJson } from './protocol.js'
+import { readFrames, streamPayloads, decodeErrorJson, demuxTrailers, HEADER_ACCEPT_ENCODING, HEADER_CONTENT_ENCODING, ENCODING_GZIP } from './protocol.js'
 
 /** Build a fetch-based Transport. */
 export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch): Transport {
@@ -14,27 +15,33 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
   return {
     async send(req: Request): Promise<Response> {
       const res = await fetchFn(join(req.url), {
-        method: req.method,
-        headers: sendHeaders(req.headers),
+        method: 'POST',
+        headers: { ...sendHeaders(req.headers), [HEADER_ACCEPT_ENCODING]: ENCODING_GZIP },
         body: req.body as unknown as BodyInit | null,
         ...(req.signal !== undefined ? { signal: req.signal } : {}),
       })
-      const body = new Uint8Array(await res.arrayBuffer())
-      const headers = fromFetchHeaders(res.headers)
+      let body: Uint8Array = new Uint8Array(await res.arrayBuffer())
+      const allHeaders = fromFetchHeaders(res.headers)
+      const { headers, trailers } = demuxTrailers(allHeaders)
+      if ((headers[HEADER_CONTENT_ENCODING]?.[0] ?? '') === ENCODING_GZIP && body.length > 0) {
+        body = gzipDecompress(body)
+      }
       const error = decodeErrorJson(res.status, headers, body)
-      return { status: res.status, headers, body, ...(error !== null ? { error } : {}) }
+      return { status: res.status, headers, body, trailers, ...(error !== null ? { error } : {}) }
     },
     async openStream(req: Request): Promise<Stream> {
       const res = await fetchFn(join(req.url), {
-        method: req.method,
+        method: 'POST',
         headers: { ...sendHeaders(req.headers), 'connect-accept-encoding': 'gzip' },
         body: req.body as unknown as BodyInit | null,
         ...(req.signal !== undefined ? { signal: req.signal } : {}),
       })
-      if (!res.body) return { async *[Symbol.asyncIterator]() {}, cancel() {} }
+      if (!res.body) {
+        const empty = streamPayloads((async function* () {})())
+        return { async *[Symbol.asyncIterator]() { yield* empty.payloads }, trailers: empty.trailers, cancel() {} }
+      }
       const reader = res.body.getReader()
       const source = (async function* () {
-        // readBytes as Uint8Array chunks
         for (;;) {
           const { done, value } = await reader.read()
           if (done) return
@@ -42,22 +49,18 @@ export function createFetchTransport(baseUrl = '', fetchFn: typeof fetch = fetch
         }
       })()
       const framed = readFrames(source, undefined, gzipDecompress)
+      const sp = streamPayloads(framed)
       return {
         async *[Symbol.asyncIterator]() {
-          yield* streamPayloads(framed)
+          yield* sp.payloads
         },
+        trailers: sp.trailers,
         cancel() {
           void reader.cancel()
         },
       }
     },
   }
-}
-
-function headersToFetch(h: Request['headers']): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(h)) out[k] = v.join(',')
-  return out
 }
 
 function fromFetchHeaders(h: Headers): Request['headers'] {

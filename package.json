@@ -1,6 +1,6 @@
 {
   "name": "@easy-utils/easy-rpc",
-  "version": "0.5.8",
+  "version": "2.0.0",
   "description": "Zero-runtime-bindings easy-rpc core for TypeScript (Connect wire: unary + server-stream).",
   "type": "module",
   "main": "./src/index.ts",
@@ -35,6 +35,8 @@
     "@bufbuild/protobuf": "^2.14.1"
   },
   "devDependencies": {
+    "@connectrpc/connect": "^2.2.0",
+    "@connectrpc/connect-node": "^2.2.0",
     "@types/node": "^26.5.0",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"

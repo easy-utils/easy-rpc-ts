@@ -6,7 +6,7 @@
 // Bridge-only: the protocol logic (frames, headers, content-type) stays in core.
 import type { Request, Response, Stream, Transport, Headers as HeadersT } from './protocol.js'
 import { gzipDecompress } from './compression.js'
-import { readFrames, RPCError, streamPayloads, decodeErrorJson } from './protocol.js'
+import { readFrames, RPCError, streamPayloads, decodeErrorJson, demuxTrailers, HEADER_CONTENT_ENCODING, ENCODING_GZIP } from './protocol.js'
 import http2 from 'node:http2'
 import http from 'node:http'
 
@@ -79,19 +79,27 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
       else req.signal.addEventListener('abort', kill, { once: true })
     }
     const chunks: Uint8Array[] = []
+    const headers: HeadersT = {}
     const status = await new Promise<number>((resolve, reject) => {
-      stream.on('response', (headers: http2.IncomingHttpHeaders) => {
-        if (Number(headers[':status'] ?? 200) >= 300) {
-          reject(new RPCError(13, 'http error'))
+      stream.on('response', (h: http2.IncomingHttpHeaders) => {
+        for (const [k, v] of Object.entries(h)) {
+          if (k.startsWith(':')) continue
+          headers[k] = Array.isArray(v) ? (v as string[]) : [String(v)]
         }
       })
       stream.on('data', (c: Uint8Array) => chunks.push(c))
-      stream.on('end', () => resolve(200))
+      stream.on('end', () => resolve(Number(headers[':status']?.[0] ?? 200)))
       stream.on('error', reject)
       stream.end(req.body ?? new Uint8Array(0))
     })
     session.close()
-    return { status, headers: {}, body: concatAll(chunks) }
+    const { headers: h2, trailers } = demuxTrailers(headers)
+    let body = concatAll(chunks)
+    if ((h2[HEADER_CONTENT_ENCODING]?.[0] ?? '') === ENCODING_GZIP && body.length > 0) {
+      body = gzipDecompress(body)
+    }
+    const err = decodeErrorJson(status, h2, body)
+    return { status, headers: h2, body, trailers, ...(err !== null ? { error: err } : {}) }
   }
 
   function doOpenStream(req: Request): Promise<Stream> {
@@ -107,10 +115,12 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
       for await (const c of stream) yield c as Uint8Array
     })()
     const framed = readFrames(chunks, undefined, gzipDecompress)
+    const sp = streamPayloads(framed)
     return Promise.resolve({
       async *[Symbol.asyncIterator]() {
-        yield* streamPayloads(framed)
+        yield* sp.payloads
       },
+      trailers: sp.trailers,
       cancel() {
         try { stream.close(); session.close() } catch { /* noop */ }
       },
@@ -181,23 +191,34 @@ export function createHttp1Transport(agent?: http.Agent, base = ''): Transport {
   return {
     async send(req: Request): Promise<Response> {
       const res = await httpRequest(req, agent, base)
-      const headers: HeadersT = {}
-      for (const [k, v] of Object.entries(res.headers)) headers[k] = [v]
-      const err = decodeErrorJson(res.status, headers, res.body)
+      const all: HeadersT = {}
+      for (const [k, v] of Object.entries(res.headers)) {
+        if (Array.isArray(v)) all[k] = v
+        else if (v !== undefined) all[k] = [v]
+      }
+      const { headers, trailers } = demuxTrailers(all)
+      let body = res.body
+      if ((headers[HEADER_CONTENT_ENCODING]?.[0] ?? '') === ENCODING_GZIP && body.length > 0) {
+        body = gzipDecompress(body)
+      }
+      const err = decodeErrorJson(res.status, headers, body)
       return {
         status: res.status,
         headers,
-        body: res.body,
+        body,
+        trailers,
         ...(err !== null ? { error: err } : {}),
       }
     },
     async openStream(req: Request): Promise<Stream> {
       const res = await httpStream(req, agent, base)
       const framed = readFrames(res.raw, undefined, gzipDecompress)
+      const sp = streamPayloads(framed)
       return {
         async *[Symbol.asyncIterator]() {
-          yield* streamPayloads(framed)
+          yield* sp.payloads
         },
+        trailers: sp.trailers,
         cancel() { res.destroy() },
       }
     },
@@ -222,7 +243,7 @@ function httpStream(
       hostname: u.hostname,
       port: u.port || (u.protocol === 'https:' ? 443 : 80),
       path: u.pathname + u.search,
-      method: req.method,
+      method: 'POST',
       headers: headersToRecord(req.headers),
       agent,
     }, (resp) => {
@@ -250,7 +271,7 @@ function httpRequest(req: Request, agent?: http.Agent, base = ''): Promise<{ sta
       hostname: u.hostname,
       port: u.port || (u.protocol === 'https:' ? 443 : 80),
       path: u.pathname + u.search,
-      method: req.method,
+      method: 'POST',
       headers: headersToRecord(req.headers),
       agent,
     }, (resp) => {
@@ -274,7 +295,7 @@ function httpRequest(req: Request, agent?: http.Agent, base = ''): Promise<{ sta
 }
 
 function headersFor(req: Request, stream: boolean, base = ''): http2.OutgoingHttpHeaders {
-  const out: Record<string, string | string[]> = { ':method': req.method }
+  const out: Record<string, string | string[]> = { ':method': 'POST' }
   const u = new URL(join(base, req.url))
   out[':path'] = u.pathname + u.search
   for (const [k, v] of Object.entries(req.headers)) {

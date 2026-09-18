@@ -53,7 +53,6 @@ describe('conformance cross-lang', () => {
     const t = createFetchTransport()
     const res = await t.send({
       url: `http://127.0.0.1:${port}/easyrpc.conformance.v1.ConformanceService/Echo`,
-      method: 'POST',
       headers: { 'content-type': ['application/proto'] },
       body: toBinary(EchoRequestSchema, create(EchoRequestSchema, { input: 'hi' })),
     })
@@ -69,7 +68,6 @@ describe('conformance cross-lang', () => {
     const t = createFetchTransport()
     const stream = await t.openStream({
       url: `http://127.0.0.1:${port}/easyrpc.conformance.v1.ConformanceService/Count`,
-      method: 'POST',
       headers: { 'content-type': ['application/connect+proto'] },
       body: toBinary(CountRequestSchema, create(CountRequestSchema, { count: 3 })),
     })

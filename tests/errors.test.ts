@@ -8,6 +8,8 @@ import {
   encodeErrorJson,
   decodeErrorJson,
   streamPayloads,
+  demuxTrailers,
+  muxTrailers,
   frame,
   readFrames,
   RPCError,
@@ -114,8 +116,39 @@ describe('matrix: stream throws end-stream error with details', () => {
     const src = (async function* () {
       yield { payload: encodeEndStream(8, 'rl', undefined, [detail]), end: true }
     })()
-    const gen = streamPayloads(src)
-    await expect(gen.next()).rejects.toMatchObject({ code: 8, details: [detail] })
+    const sp = streamPayloads(src)
+    await expect(sp.payloads.next()).rejects.toMatchObject({ code: 8, details: [detail] })
+  })
+})
+
+// M14: END frame metadata only => clean end + trailers (spec §3.3).
+describe('matrix: streaming trailing metadata', () => {
+  it('M14 END metadata becomes trailers on a clean end', async () => {
+    const src = (async function* () {
+      yield { payload: new TextEncoder().encode('hi'), end: false }
+      yield { payload: encodeEndStream(0, '', { 'x-trl': ['v1', 'v2'] }), end: true }
+    })()
+    const sp = streamPayloads(src)
+    const out: Uint8Array[] = []
+    for await (const p of sp.payloads) out.push(p)
+    expect(out.length).toBe(1)
+    expect(sp.trailers()).toEqual({ 'x-trl': ['v1', 'v2'] })
+  })
+})
+
+// M15: unary `trailer-*` response headers are demuxed (spec §3.3).
+describe('matrix: unary trailer demux', () => {
+  it('M15 trailer- prefixed headers become trailers', () => {
+    const { headers, trailers } = demuxTrailers({
+      'content-type': ['application/proto'],
+      'trailer-x-trl': ['a'],
+      'Trailer-Y': ['b'],
+    })
+    expect(headers).toEqual({ 'content-type': ['application/proto'] })
+    expect(trailers).toEqual({ 'x-trl': ['a'], y: ['b'] })
+  })
+  it('M15b muxTrailers prefixes entries', () => {
+    expect(muxTrailers({ a: ['1'] }, { X: ['2'] })).toEqual({ a: ['1'], 'trailer-x': ['2'] })
   })
 })
 

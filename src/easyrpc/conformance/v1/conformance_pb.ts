@@ -4,14 +4,13 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import { file_google_api_annotations } from "../../../google/api/annotations_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file easyrpc/conformance/v1/conformance.proto.
  */
 export const file_easyrpc_conformance_v1_conformance: GenFile = /*@__PURE__*/
-  fileDesc("CihlYXN5cnBjL2NvbmZvcm1hbmNlL3YxL2NvbmZvcm1hbmNlLnByb3RvEhZlYXN5cnBjLmNvbmZvcm1hbmNlLnYxIhwKC0VjaG9SZXF1ZXN0Eg0KBWlucHV0GAEgASgJIh4KDEVjaG9SZXNwb25zZRIOCgZvdXRwdXQYASABKAkiHQoMQ291bnRSZXF1ZXN0Eg0KBWNvdW50GAEgASgFIh4KDUNvdW50UmVzcG9uc2USDQoFaW5kZXgYASABKAUiHgoLRmFpbFJlcXVlc3QSDwoHbWVzc2FnZRgBIAEoCSIaCgxGYWlsUmVzcG9uc2USCgoCb2sYASABKAgiDwoNSGVhbHRoUmVxdWVzdCIqCg5IZWFsdGhSZXNwb25zZRIKCgJvaxgBIAEoCBIMCgRuYW1lGAIgASgJIkcKEVN0cmVhbUZhaWxSZXF1ZXN0EhMKC2VtaXRfYmVmb3JlGAEgASgFEgwKBGNvZGUYAiABKAUSDwoHbWVzc2FnZRgDIAEoCSIjChJTdHJlYW1GYWlsUmVzcG9uc2USDQoFaW5kZXgYASABKAUiIAoPRWNob01ldGFSZXF1ZXN0Eg0KBWlucHV0GAEgASgJIpABChBFY2hvTWV0YVJlc3BvbnNlEg0KBWlucHV0GAEgASgJEkAKBG1ldGEYAiADKAsyMi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2UuTWV0YUVudHJ5GisKCU1ldGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhoKCkJpZ1JlcXVlc3QSDAoEc2l6ZRgBIAEoBSIbCgtCaWdSZXNwb25zZRIMCgRzaXplGAIgASgFIl0KEkZhaWxEZXRhaWxzUmVxdWVzdBIMCgRjb2RlGAEgASgFEg8KB21lc3NhZ2UYAiABKAkSEwoLZGV0YWlsX3R5cGUYAyABKAkSEwoLZGV0YWlsX3RleHQYBCABKAkiIQoTRmFpbERldGFpbHNSZXNwb25zZRIKCgJvaxgBIAEoCCJ4ChhTdHJlYW1GYWlsRGV0YWlsc1JlcXVlc3QSEwoLZW1pdF9iZWZvcmUYASABKAUSDAoEY29kZRgCIAEoBRIPCgdtZXNzYWdlGAMgASgJEhMKC2RldGFpbF90eXBlGAQgASgJEhMKC2RldGFpbF90ZXh0GAUgASgJIioKGVN0cmVhbUZhaWxEZXRhaWxzUmVzcG9uc2USDQoFaW5kZXgYASABKAUyxwgKEkNvbmZvcm1hbmNlU2VydmljZRJrCgZIZWFsdGgSJS5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkhlYWx0aFJlcXVlc3QaJi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkhlYWx0aFJlc3BvbnNlIhKC0+STAgwSCi92MS9oZWFsdGgSZgoERWNobxIjLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRWNob1JlcXVlc3QaJC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9SZXNwb25zZSITgtPkkwINOgEqIggvdjEvZWNobxJsCgVDb3VudBIkLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRSZXF1ZXN0GiUuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5Db3VudFJlc3BvbnNlIhSC0+STAg46ASoiCS92MS9jb3VudDABEmYKBEZhaWwSIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkZhaWxSZXF1ZXN0GiQuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5GYWlsUmVzcG9uc2UiE4LT5JMCDToBKiIIL3YxL2ZhaWwSgQEKClN0cmVhbUZhaWwSKS5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLlN0cmVhbUZhaWxSZXF1ZXN0GiouZWFzeXJwYy5jb25mb3JtYW5jZS52MS5TdHJlYW1GYWlsUmVzcG9uc2UiGoLT5JMCFDoBKiIPL3YxL3N0cmVhbS1mYWlsMAESdwoIRWNob01ldGESJy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVxdWVzdBooLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRWNob01ldGFSZXNwb25zZSIYgtPkkwISOgEqIg0vdjEvZWNoby1tZXRhEmIKA0JpZxIiLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQmlnUmVxdWVzdBojLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQmlnUmVzcG9uc2UiEoLT5JMCDDoBKiIHL3YxL2JpZxKDAQoLRmFpbERldGFpbHMSKi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkZhaWxEZXRhaWxzUmVxdWVzdBorLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRmFpbERldGFpbHNSZXNwb25zZSIbgtPkkwIVOgEqIhAvdjEvZmFpbC1kZXRhaWxzEp4BChFTdHJlYW1GYWlsRGV0YWlscxIwLmVhc3lycGMuY29uZm9ybWFuY2UudjEuU3RyZWFtRmFpbERldGFpbHNSZXF1ZXN0GjEuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5TdHJlYW1GYWlsRGV0YWlsc1Jlc3BvbnNlIiKC0+STAhw6ASoiFy92MS9zdHJlYW0tZmFpbC1kZXRhaWxzMAFCQFo+Z2l0aHViLmNvbS9lYXN5LXV0aWxzL2Vhc3ktcnBjLWdvL2NvbmZvcm1hbmNlL3YxO2NvbmZvcm1hbmNldjFiBnByb3RvMw", [file_google_api_annotations]);
+  fileDesc("CihlYXN5cnBjL2NvbmZvcm1hbmNlL3YxL2NvbmZvcm1hbmNlLnByb3RvEhZlYXN5cnBjLmNvbmZvcm1hbmNlLnYxIhwKC0VjaG9SZXF1ZXN0Eg0KBWlucHV0GAEgASgJIh4KDEVjaG9SZXNwb25zZRIOCgZvdXRwdXQYASABKAkiHQoMQ291bnRSZXF1ZXN0Eg0KBWNvdW50GAEgASgFIh4KDUNvdW50UmVzcG9uc2USDQoFaW5kZXgYASABKAUiHgoLRmFpbFJlcXVlc3QSDwoHbWVzc2FnZRgBIAEoCSIaCgxGYWlsUmVzcG9uc2USCgoCb2sYASABKAgiDwoNSGVhbHRoUmVxdWVzdCIqCg5IZWFsdGhSZXNwb25zZRIKCgJvaxgBIAEoCBIMCgRuYW1lGAIgASgJIkcKEVN0cmVhbUZhaWxSZXF1ZXN0EhMKC2VtaXRfYmVmb3JlGAEgASgFEgwKBGNvZGUYAiABKAUSDwoHbWVzc2FnZRgDIAEoCSIjChJTdHJlYW1GYWlsUmVzcG9uc2USDQoFaW5kZXgYASABKAUiIAoPRWNob01ldGFSZXF1ZXN0Eg0KBWlucHV0GAEgASgJIpABChBFY2hvTWV0YVJlc3BvbnNlEg0KBWlucHV0GAEgASgJEkAKBG1ldGEYAiADKAsyMi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2UuTWV0YUVudHJ5GisKCU1ldGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIhoKCkJpZ1JlcXVlc3QSDAoEc2l6ZRgBIAEoBSIbCgtCaWdSZXNwb25zZRIMCgRzaXplGAIgASgFIl0KEkZhaWxEZXRhaWxzUmVxdWVzdBIMCgRjb2RlGAEgASgFEg8KB21lc3NhZ2UYAiABKAkSEwoLZGV0YWlsX3R5cGUYAyABKAkSEwoLZGV0YWlsX3RleHQYBCABKAkiIQoTRmFpbERldGFpbHNSZXNwb25zZRIKCgJvaxgBIAEoCCJ4ChhTdHJlYW1GYWlsRGV0YWlsc1JlcXVlc3QSEwoLZW1pdF9iZWZvcmUYASABKAUSDAoEY29kZRgCIAEoBRIPCgdtZXNzYWdlGAMgASgJEhMKC2RldGFpbF90eXBlGAQgASgJEhMKC2RldGFpbF90ZXh0GAUgASgJIioKGVN0cmVhbUZhaWxEZXRhaWxzUmVzcG9uc2USDQoFaW5kZXgYASABKAUiIwoSRWNob1RyYWlsZXJSZXF1ZXN0Eg0KBWlucHV0GAEgASgJIiUKE0VjaG9UcmFpbGVyUmVzcG9uc2USDgoGb3V0cHV0GAEgASgJIiQKE0NvdW50VHJhaWxlclJlcXVlc3QSDQoFY291bnQYASABKAUiJQoUQ291bnRUcmFpbGVyUmVzcG9uc2USDQoFaW5kZXgYASABKAUyuggKEkNvbmZvcm1hbmNlU2VydmljZRJXCgZIZWFsdGgSJS5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkhlYWx0aFJlcXVlc3QaJi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkhlYWx0aFJlc3BvbnNlElEKBEVjaG8SIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9SZXF1ZXN0GiQuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvUmVzcG9uc2USVgoFQ291bnQSJC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkNvdW50UmVxdWVzdBolLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRSZXNwb25zZTABElEKBEZhaWwSIy5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkZhaWxSZXF1ZXN0GiQuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5GYWlsUmVzcG9uc2USZQoKU3RyZWFtRmFpbBIpLmVhc3lycGMuY29uZm9ybWFuY2UudjEuU3RyZWFtRmFpbFJlcXVlc3QaKi5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLlN0cmVhbUZhaWxSZXNwb25zZTABEl0KCEVjaG9NZXRhEicuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvTWV0YVJlcXVlc3QaKC5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLkVjaG9NZXRhUmVzcG9uc2USTgoDQmlnEiIuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5CaWdSZXF1ZXN0GiMuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5CaWdSZXNwb25zZRJmCgtGYWlsRGV0YWlscxIqLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRmFpbERldGFpbHNSZXF1ZXN0GisuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5GYWlsRGV0YWlsc1Jlc3BvbnNlEnoKEVN0cmVhbUZhaWxEZXRhaWxzEjAuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5TdHJlYW1GYWlsRGV0YWlsc1JlcXVlc3QaMS5lYXN5cnBjLmNvbmZvcm1hbmNlLnYxLlN0cmVhbUZhaWxEZXRhaWxzUmVzcG9uc2UwARJmCgtFY2hvVHJhaWxlchIqLmVhc3lycGMuY29uZm9ybWFuY2UudjEuRWNob1RyYWlsZXJSZXF1ZXN0GisuZWFzeXJwYy5jb25mb3JtYW5jZS52MS5FY2hvVHJhaWxlclJlc3BvbnNlEmsKDENvdW50VHJhaWxlchIrLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRUcmFpbGVyUmVxdWVzdBosLmVhc3lycGMuY29uZm9ybWFuY2UudjEuQ291bnRUcmFpbGVyUmVzcG9uc2UwAUJAWj5naXRodWIuY29tL2Vhc3ktdXRpbHMvZWFzeS1ycGMtZ28vY29uZm9ybWFuY2UvdjE7Y29uZm9ybWFuY2V2MWIGcHJvdG8z");
 
 /**
  * @generated from message easyrpc.conformance.v1.EchoRequest
@@ -379,6 +378,74 @@ export const StreamFailDetailsResponseSchema: GenMessage<StreamFailDetailsRespon
   messageDesc(file_easyrpc_conformance_v1_conformance, 17);
 
 /**
+ * @generated from message easyrpc.conformance.v1.EchoTrailerRequest
+ */
+export type EchoTrailerRequest = Message<"easyrpc.conformance.v1.EchoTrailerRequest"> & {
+  /**
+   * @generated from field: string input = 1;
+   */
+  input: string;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.EchoTrailerRequest.
+ * Use `create(EchoTrailerRequestSchema)` to create a new message.
+ */
+export const EchoTrailerRequestSchema: GenMessage<EchoTrailerRequest> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 18);
+
+/**
+ * @generated from message easyrpc.conformance.v1.EchoTrailerResponse
+ */
+export type EchoTrailerResponse = Message<"easyrpc.conformance.v1.EchoTrailerResponse"> & {
+  /**
+   * @generated from field: string output = 1;
+   */
+  output: string;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.EchoTrailerResponse.
+ * Use `create(EchoTrailerResponseSchema)` to create a new message.
+ */
+export const EchoTrailerResponseSchema: GenMessage<EchoTrailerResponse> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 19);
+
+/**
+ * @generated from message easyrpc.conformance.v1.CountTrailerRequest
+ */
+export type CountTrailerRequest = Message<"easyrpc.conformance.v1.CountTrailerRequest"> & {
+  /**
+   * @generated from field: int32 count = 1;
+   */
+  count: number;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.CountTrailerRequest.
+ * Use `create(CountTrailerRequestSchema)` to create a new message.
+ */
+export const CountTrailerRequestSchema: GenMessage<CountTrailerRequest> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 20);
+
+/**
+ * @generated from message easyrpc.conformance.v1.CountTrailerResponse
+ */
+export type CountTrailerResponse = Message<"easyrpc.conformance.v1.CountTrailerResponse"> & {
+  /**
+   * @generated from field: int32 index = 1;
+   */
+  index: number;
+};
+
+/**
+ * Describes the message easyrpc.conformance.v1.CountTrailerResponse.
+ * Use `create(CountTrailerResponseSchema)` to create a new message.
+ */
+export const CountTrailerResponseSchema: GenMessage<CountTrailerResponse> = /*@__PURE__*/
+  messageDesc(file_easyrpc_conformance_v1_conformance, 21);
+
+/**
  * @generated from service easyrpc.conformance.v1.ConformanceService
  */
 export const ConformanceService: GenService<{
@@ -435,7 +502,7 @@ export const ConformanceService: GenService<{
     output: typeof EchoMetaResponseSchema;
   },
   /**
-   * Return `size` bytes to exercise max-message behavior.
+   * Return `size` bytes to exercise max-message behavior (and unary gzip).
    *
    * @generated from rpc easyrpc.conformance.v1.ConformanceService.Big
    */
@@ -463,6 +530,26 @@ export const ConformanceService: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamFailDetailsRequestSchema;
     output: typeof StreamFailDetailsResponseSchema;
+  },
+  /**
+   * Set unary trailing metadata (wire: response headers prefixed `trailer-`).
+   *
+   * @generated from rpc easyrpc.conformance.v1.ConformanceService.EchoTrailer
+   */
+  echoTrailer: {
+    methodKind: "unary";
+    input: typeof EchoTrailerRequestSchema;
+    output: typeof EchoTrailerResponseSchema;
+  },
+  /**
+   * Set streaming trailing metadata (wire: END-frame JSON `metadata`).
+   *
+   * @generated from rpc easyrpc.conformance.v1.ConformanceService.CountTrailer
+   */
+  countTrailer: {
+    methodKind: "server_streaming";
+    input: typeof CountTrailerRequestSchema;
+    output: typeof CountTrailerResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_easyrpc_conformance_v1_conformance, 0);

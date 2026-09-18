@@ -54,7 +54,7 @@ describe('server-stream incrementality', () => {
         },
       )
       req.on('error', reject)
-      req.end()
+      req.end(Buffer.from([0,0,0,0,0]))
     })
     server.close()
 
@@ -95,7 +95,7 @@ describe('server-stream incrementality', () => {
         },
       )
       req.on('error', reject)
-      req.end()
+      req.end(Buffer.from([0,0,0,0,0]))
     })
     release()
     server.close()
@@ -149,7 +149,7 @@ describe('end-stream error (Connect JSON)', () => {
           },
         )
         req.on('error', reject)
-        req.end()
+        req.end(Buffer.from([0,0,0,0,0]))
       })
     } catch (e) { caught = e }
     server.close()
@@ -191,7 +191,7 @@ describe('deadline (Connect-Timeout-Ms)', () => {
           })()
         },
       )
-      req.end()
+      req.end(Buffer.from([0,0,0,0,0]))
     })
     server.close()
     expect(err?.code).toBe(4)
@@ -232,7 +232,7 @@ describe('gzip compression (opt-in via accept-encoding)', () => {
           })()
         },
       )
-      req.end()
+      req.end(Buffer.from([0,0,0,0,0]))
     })
     server.close()
     expect(payloads).toEqual([4096]) // decompressed transparently

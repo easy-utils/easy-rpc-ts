@@ -1,29 +1,50 @@
-// easy-rpc TS server core: ASGI-style dispatch + JSON/proto content
-// negotiation. This module is server-only and may import Node built-ins; the
-// client entry (index.ts) does NOT re-export it.
+// easy-rpc TS server core: push-based dispatch for the Connect wire subset
+// (unary + server-stream, proto only, POST only). This module is server-only
+// and may import Node built-ins; the client entry (index.ts) does NOT re-export
+// it.
 //
 // The dispatch core is PUSH-based: it decodes an RPC request and writes the
 // response into a `ResponseWriter`. Server-stream responses are written and
 // flushed frame-by-frame — never buffered. Runtime adapters (node:http,
 // node:http2, fetch/Web) implement the writer for their transport.
-import type { Bytes, Headers, Request, Response, ResponseWriter, ServerDispatch } from './protocol.js'
-import {
-  httpStatus, RPCError, frame, encodeEndStream, parseTimeout, HEADER_TIMEOUT, encodeErrorJson,
-  DEFAULT_MAX_MESSAGE_BYTES, HEADER_PROTOCOL_VERSION, CONNECT_PROTOCOL_VERSION,
-  HEADER_ACCEPT_ENCODING, ENCODING_GZIP, COMPRESS_MIN_BYTES,
+import type {
+  Bytes,
+  HandlerContext,
+  Headers,
+  Request,
+  Response,
+  ResponseWriter,
+  ServerDispatch,
+  ServiceHandlers,
 } from './protocol.js'
-import { gzipCompress } from './compression.js'
-import { type ContentKind, type ServiceHandlers, detectKind } from './protocol.js'
+import {
+  CONTENT_TYPE_STREAM,
+  CONTENT_TYPE_UNARY,
+  CONNECT_PROTOCOL_VERSION,
+  COMPRESS_MIN_BYTES,
+  DEFAULT_MAX_MESSAGE_BYTES,
+  ENCODING_GZIP,
+  HEADER_ACCEPT_ENCODING,
+  HEADER_CONTENT_ENCODING,
+  HEADER_PROTOCOL_VERSION,
+  HEADER_STREAM_ACCEPT_ENCODING,
+  HEADER_TIMEOUT,
+  RPCError,
+  encodeEndStream,
+  encodeErrorJson,
+  frame,
+  httpStatus,
+  
+  muxTrailers,
+  parseTimeout,
+} from './protocol.js'
+import { gzipCompress, gzipDecompress } from './compression.js'
 import nodeHttp from 'node:http'
 import nodeHttp2 from 'node:http2'
 
-export type { ContentKind, ServiceHandlers, ResponseWriter } from './protocol.js'
-export { detectKind } from './protocol.js'
+export type { ServiceHandlers, ResponseWriter } from './protocol.js'
 
 export interface MethodSpec2 { path: string; name: string; serverStream: boolean }
-
-function contentFor(kind: ContentKind): string { return kind === 'json' ? 'application/json' : 'application/proto' }
-function streamContentFor(kind: ContentKind): string { return kind === 'json' ? 'application/connect+json' : 'application/connect+proto' }
 
 /** Server dispatch: pushes a response into `w`. */
 export type ServerHandler = ServerDispatch
@@ -36,34 +57,61 @@ export function createServer(
 ): ServerHandler {
   const maxBytes = opts.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES
   return async (req: Request, w: ResponseWriter): Promise<void> => {
-    const kind = detectKind(req)
     const pathname = new URL(req.url.startsWith('http') ? req.url : 'http://localhost' + req.url).pathname
     const body = req.body ?? new Uint8Array(0)
+    const ct = req.headers['content-type']?.[0] ?? ''
 
     // Protocol version: reject an explicitly-unsupported version (absent is ok).
     const pv = req.headers[HEADER_PROTOCOL_VERSION]?.[0]
     if (pv !== undefined && pv !== '' && pv !== CONNECT_PROTOCOL_VERSION) {
-      return fail(w, new RPCError(12, `unsupported connect-protocol-version: ${pv}`), kind)
+      return fail(w, new RPCError(12, `unsupported connect-protocol-version: ${pv}`))
+    }
+
+    const spec = methods.find(m => m.path === pathname)
+    if (!spec) return fail(w, new RPCError(5, 'not found'))
+
+    // proto-only (spec §2): unary uses application/proto, server-stream uses
+    // application/connect+proto. JSON content types are rejected with 415.
+    const expected = spec.serverStream ? CONTENT_TYPE_STREAM : CONTENT_TYPE_UNARY
+    const got = (ct.split(';')[0] ?? '').trim().toLowerCase()
+    if (got !== expected) {
+      return fail(w, new RPCError(3, `unsupported content-type: ${ct || '(none)'} (expected ${expected})`), 415)
     }
     if (body.length > maxBytes) {
-      return fail(w, new RPCError(8, `request too large: ${body.length} > ${maxBytes}`), kind)
+      return fail(w, new RPCError(8, `request too large: ${body.length} > ${maxBytes}`))
     }
 
     // Deadline: the Connect timeout header bounds the whole call.
     const timeoutMs = parseTimeout(req.headers[HEADER_TIMEOUT]?.[0])
     const timedOut = (): RPCError => new RPCError(4, 'deadline exceeded')
 
-    // `Spec` matching (streaming methods are POST-only).
-    const spec = methods.find(m => m.path === pathname && (!m.serverStream || req.method === 'POST'))
-    if (!spec) return fail(w, new RPCError(5, 'not found'), kind)
+    // Trailing metadata set by the handler.
+    const trailers: Headers = {}
+    const ctx: HandlerContext = {
+      headers: req.headers,
+      setTrailer(key: string, value: string) {
+        const k = key.toLowerCase()
+        const cur = trailers[k]
+        if (cur === undefined) trailers[k] = [value]
+        else cur.push(value)
+      },
+    }
 
     if (spec.serverStream) {
       const h = handlers.stream[spec.name]
-      if (!h) return fail(w, new RPCError(5, 'no handler'), kind)
+      if (!h) return fail(w, new RPCError(5, 'no handler'))
+      // Stream request body is ENVELOPED (spec §3.2): one data frame carrying
+      // the single request message. Unframe it before dispatch.
+      let reqBody: Bytes
+      try {
+        reqBody = await readSingleFrame(body, maxBytes)
+      } catch (e) {
+        return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)))
+      }
       // Stream: HTTP status is always 200; errors go into the END frame.
       w.status(200)
-      w.header('content-type', streamContentFor(kind))
-      const wantsGzip = (req.headers[HEADER_ACCEPT_ENCODING] ?? []).some(
+      w.header('content-type', CONTENT_TYPE_STREAM)
+      const wantsGzip = (req.headers[HEADER_STREAM_ACCEPT_ENCODING] ?? []).some(
         (v) => v.split(',').map((s) => s.trim()).includes(ENCODING_GZIP),
       )
       let wroteEnd = false
@@ -71,7 +119,7 @@ export function createServer(
         if (wroteEnd) return
         if (end) {
           wroteEnd = true
-          await w.write(frame(new Uint8Array(0), true))
+          await w.write(frame(encodeEndStream(0, '', trailers), true))
           return
         }
         if (wantsGzip && data.length >= COMPRESS_MIN_BYTES) {
@@ -87,54 +135,90 @@ export function createServer(
             timer = setTimeout(() => rej(timedOut()), timeoutMs)
           })
           try {
-            await Promise.race([h(body, kind, emit), deadline])
+            await Promise.race([h(reqBody, ctx, emit), deadline])
           } finally {
             if (timer !== undefined) clearTimeout(timer)
           }
         } else {
-          await h(body, kind, emit)
+          await h(reqBody, ctx, emit)
         }
       } catch (e) {
         // Propagate the failure in the END frame (HTTP stays 200).
         const err = e instanceof RPCError ? e : new RPCError(13, String(e))
         if (!wroteEnd) {
           wroteEnd = true
-          await w.write(frame(encodeEndStream(err.code, err.message, undefined, err.details), true))
+          await w.write(frame(encodeEndStream(err.code, err.message, trailers, err.details), true))
         }
         await w.finish()
         return
       }
-      if (!wroteEnd) await w.write(frame(new Uint8Array(0), true))
+      if (!wroteEnd) await w.write(frame(encodeEndStream(0, '', trailers), true))
       await w.finish()
       return
     }
 
     // Unary: resolve fully BEFORE writing so a thrown error can set a real status.
     const h = handlers.unary[spec.name]
-    if (!h) return fail(w, new RPCError(5, 'no handler'), kind)
+    if (!h) return fail(w, new RPCError(5, 'no handler'))
     let out: Bytes
     try {
       out = timeoutMs > 0 ? await Promise.race([
-        h(body, kind),
+        h(body, ctx),
         new Promise<never>((_, rej) => setTimeout(() => rej(timedOut()), timeoutMs)),
-      ]) : await h(body, kind)
+      ]) : await h(body, ctx)
     } catch (e) {
-      return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), kind)
+      return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), undefined, trailers)
     }
     w.status(200)
-    w.header('content-type', contentFor(kind))
+    w.header('content-type', CONTENT_TYPE_UNARY)
+    // Unary: compress the whole body when the client accepts gzip (spec §3.5).
+    const wantsGzip = acceptsUnaryGzip(req.headers)
+    if (wantsGzip && out.length >= COMPRESS_MIN_BYTES) {
+      w.header(HEADER_CONTENT_ENCODING, ENCODING_GZIP)
+      out = gzipCompress(out)
+    }
+    for (const [k, v] of Object.entries(muxTrailers({}, trailers))) {
+      w.header(k, v[0] ?? '')
+    }
     await w.write(out)
     await w.finish()
   }
 }
 
-/** Emit a non-200 error response (before any stream body has been written). */
-async function fail(w: ResponseWriter, err: RPCError, _kind: ContentKind): Promise<void> {
-  // Connect unary error: HTTP status carries the class, the body is JSON
-  // `{code,message}`. Legacy plain-text + connect-code headers are still
-  // accepted by clients for backward compatibility.
-  w.status(httpStatus(err.code))
+function acceptsUnaryGzip(headers: Headers): boolean {
+  return (headers[HEADER_ACCEPT_ENCODING] ?? []).some(
+    (v) => v.split(',').map((s) => s.trim()).includes(ENCODING_GZIP),
+  )
+}
+
+/** Read exactly one frame (the enveloped server-stream request message).
+ *  Returns the payload. Throws on truncation / size violation. */
+async function readSingleFrame(body: Bytes, maxBytes: number): Promise<Bytes> {
+  if (body.length < 5) {
+    throw new RPCError(13, `stream request: truncated frame header (${body.length} bytes)`)
+  }
+  const flags = body[0] ?? 0
+  const len = new DataView(body.buffer, body.byteOffset, body.byteLength).getUint32(1, false)
+  if (len > maxBytes) throw new RPCError(8, `frame too large: ${len} > ${maxBytes}`)
+  if (body.length < 5 + len) {
+    throw new RPCError(13, `stream request: truncated frame (want ${5 + len}, have ${body.length})`)
+  }
+  if ((flags & 0x01) !== 0) {
+    // Compressed request frame (optional). Decompress.
+    return gzipDecompress(body.slice(5, 5 + len))
+  }
+  return body.slice(5, 5 + len)
+}
+
+/** Emit a non-200 error response (before any stream body has been written).
+ *  Unary errors use the Connect HTTP-status + JSON body shape; trailers are
+ *  muxed as `trailer-*` headers. */
+async function fail(w: ResponseWriter, err: RPCError, statusOverride?: number, trailers: Headers = {}): Promise<void> {
+  w.status(statusOverride ?? httpStatus(err.code))
   w.header('content-type', 'application/json')
+  for (const [k, v] of Object.entries(muxTrailers({}, trailers))) {
+    w.header(k, v[0] ?? '')
+  }
   await w.write(encodeErrorJson(err.code, err.message, err.details))
   await w.finish()
 }
@@ -195,10 +279,7 @@ export function nodeServer(handler: ServerHandler): nodeHttp.Server {
       }
       const w = nodeWriter(res)
       try {
-        await handler(
-          { url: req.url ?? '/', method: req.method ?? 'POST', headers, body },
-          w,
-        )
+        await handler({ url: req.url ?? '/', headers, body }, w)
       } catch {
         // A writer-level failure: the response may already be streaming, so we
         // can only end it. Log-free: the caller owns observability.
@@ -223,7 +304,6 @@ export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.H
         if (k.startsWith(':')) continue
         h[k] = Array.isArray(v) ? v as string[] : [v as string]
       }
-      const method = String(headers[':method'] ?? 'GET')
       const url = String(headers[':path'] ?? '/')
       let status = 200
       const outHeaders: Record<string, string> = {}
@@ -246,7 +326,7 @@ export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.H
         },
       }
       try {
-        await handler({ url, method, headers: h, body }, w)
+        await handler({ url, headers: h, body }, w)
       } catch {
         if (!started) stream.respond({ ':status': 500 })
         stream.end()
