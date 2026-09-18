@@ -35,8 +35,39 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
     const target = join(opts.base, url)
     const u = new URL(target.startsWith('http') ? target : 'http://' + target)
     const session = http2.connect(u.protocol === 'https:' ? u.href : `http://${u.host}`)
+    // A session error is surfaced through the request stream; keep a no-op
+    // listener so a failed h2 preface (e.g. an h1-only peer) never crashes the
+    // process as an unhandled 'error' event.
     session.on('error', () => { /* surfaced via stream error */ })
     return session
+  }
+
+  /**
+   * Wait until the peer confirms it speaks HTTP/2 (SETTINGS frame). Used in
+   * `auto` mode BEFORE issuing a request, so an h1-only peer falls back to the
+   * h1 bridge deterministically instead of failing mid-stream.
+   */
+  function h2Ready(session: http2.ClientHttp2Session, timeoutMs = 2000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const done = (fn: () => void) => {
+        clearTimeout(timer)
+        session.off('remoteSettings', onSettings)
+        session.off('error', onError)
+        session.off('close', onClose)
+        fn()
+      }
+      const onSettings = () => done(resolve)
+      const onError = () => done(() => reject(new RPCError(14, 'h2 handshake failed')))
+      const onClose = () =>
+        done(() => reject(new RPCError(14, 'h2 session closed before SETTINGS')))
+      const timer = setTimeout(
+        () => done(() => reject(new RPCError(14, 'h2 handshake timeout'))),
+        timeoutMs,
+      )
+      session.once('remoteSettings', onSettings)
+      session.once('error', onError)
+      session.once('close', onClose)
+    })
   }
 
   async function doSend(req: Request): Promise<Response> {
@@ -89,9 +120,40 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
   // HTTP/1.1 fallback (used when 'auto' or explicit 'h1').
   const h1Transport: Transport = createHttp1Transport(opts.httpAgent, opts.base)
 
+  /**
+   * Auto mode: probe the h2 handshake first (SETTINGS). If the peer is h1-only
+   * the probe fails/aborts and we use the h1 bridge — importantly for streams,
+   * BEFORE any request is issued, so no mid-stream error escapes. The result is
+   * memoized per origin so a stable peer costs one probe, not one per call.
+   */
+  const h2Probe = new Map<string, boolean>()
+  async function autoH2Available(req: Request): Promise<boolean> {
+    const target = join(opts.base, req.url)
+    const u = new URL(target.startsWith('http') ? target : 'http://' + target)
+    const origin = `${u.protocol}//${u.host}`
+    const known = h2Probe.get(origin)
+    if (known !== undefined) return known
+    const session = http2.connect(u.protocol === 'https:' ? u.href : `http://${u.host}`)
+    session.on('error', () => { /* handled by h2Ready */ })
+    let ok = false
+    try {
+      await h2Ready(session)
+      session.close()
+      ok = true
+    } catch {
+      try { session.destroy() } catch { /* noop */ }
+      ok = false
+    }
+    h2Probe.set(origin, ok)
+    return ok
+  }
+
   return {
     async send(req: Request): Promise<Response> {
       if (protocol === 'h1') return h1Transport.send(req)
+      if (protocol === 'auto' && !(await autoH2Available(req))) {
+        return h1Transport.send(req)
+      }
       try {
         return await doSend(req)
       } catch (e) {
@@ -101,6 +163,9 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
     },
     async openStream(req: Request): Promise<Stream> {
       if (protocol === 'h1') return h1Transport.openStream(req)
+      if (protocol === 'auto' && !(await autoH2Available(req))) {
+        return h1Transport.openStream(req)
+      }
       try {
         return await doOpenStream(req)
       } catch (e) {
