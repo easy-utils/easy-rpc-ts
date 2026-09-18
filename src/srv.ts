@@ -27,7 +27,10 @@ const impl: any = {
       },
     }
   },
-  fail: async (req: any) => create(FailResponseSchema, { ok: req.message === '' }),
+  fail: async (req: any) => {
+    if (req.message !== '') throw new RPCError(3, req.message)
+    return create(FailResponseSchema, { ok: true })
+  },
   streamFail: async (in_: any) => ({
     async *[Symbol.asyncIterator]() {
       for (let i = 0; i < (in_.emitBefore ?? 0); i++) yield create(StreamFailResponseSchema, { index: i } as any)
@@ -58,7 +61,7 @@ const impl: any = {
     return create(EchoTrailerResponseSchema, { output: 'trailer:' + String(in_.input ?? '') } as any)
   },
   countTrailer: async (in_: any, ctx: any) => {
-    ctx?.setTrailer?.('x-ctrailer', 'done-' + String(in_.count ?? ''))
+    ctx?.setTrailer?.('x-ctrailer', 'done')
     const n = in_.count > 0 ? in_.count : 3
     return {
       async *[Symbol.asyncIterator]() {
