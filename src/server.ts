@@ -279,7 +279,7 @@ export function nodeServer(handler: ServerHandler): nodeHttp.Server {
       }
       const w = nodeWriter(res)
       try {
-        await handler({ url: req.url ?? '/', headers, body }, w)
+        await handler({ url: req.url ?? '/', method: req.method ?? 'POST', headers, body }, w)
       } catch {
         // A writer-level failure: the response may already be streaming, so we
         // can only end it. Log-free: the caller owns observability.
@@ -326,7 +326,7 @@ export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.H
         },
       }
       try {
-        await handler({ url, headers: h, body }, w)
+        await handler({ url, method: String(headers[':method'] ?? 'POST'), headers: h, body }, w)
       } catch {
         if (!started) stream.respond({ ':status': 500 })
         stream.end()

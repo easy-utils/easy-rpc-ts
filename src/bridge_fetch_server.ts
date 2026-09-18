@@ -19,6 +19,7 @@ export function toWebHandler(dispatch: ServerDispatch): WebHandler {
     })
     const core: CoreRequest = {
       url: new URL(req.url).pathname,
+      method: req.method,
       headers,
       body,
     }

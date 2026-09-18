@@ -112,6 +112,10 @@ export interface Request {
   url: string
   headers: Headers
   body: Bytes | undefined
+  /** Server-side only: the incoming HTTP method (set by the server adapters).
+   *  Client calls are always POST (spec §0) and leave this unset; the server
+   *  dispatch uses it to answer CORS preflight (OPTIONS) before the RPC core. */
+  method?: string
   /** Local cancellation channel. Adapters that support abort (fetch signal,
    *  node request destroy, h2 stream close) honour it; others ignore it. */
   signal?: AbortSignal
