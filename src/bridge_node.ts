@@ -87,7 +87,7 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
   }
 
   // HTTP/1.1 fallback (used when 'auto' or explicit 'h1').
-  const h1Transport: Transport = createHttp1Transport(opts.httpAgent)
+  const h1Transport: Transport = createHttp1Transport(opts.httpAgent, opts.base)
 
   return {
     async send(req: Request): Promise<Response> {
