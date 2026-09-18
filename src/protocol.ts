@@ -161,7 +161,7 @@ function base64Encode(b: Bytes): string {
   let out = ''
   for (let i = 0; i < b.length; i += 3) {
     const n = (b[i]! << 16) | ((b[i + 1] ?? 0) << 8) | (b[i + 2] ?? 0)
-    out += B64[n >> 18] + B64[(n >> 12) & 63] + (i + 1 < b.length ? B64[(n >> 6) & 63] : '=') + (i + 2 < b.length ? B64[n & 63] : '=')
+    out += (B64[n >> 18] ?? '') + (B64[(n >> 12) & 63] ?? '') + (i + 1 < b.length ? B64[(n >> 6) & 63] ?? '' : '=') + (i + 2 < b.length ? B64[n & 63] ?? '' : '=')
   }
   return out
 }
