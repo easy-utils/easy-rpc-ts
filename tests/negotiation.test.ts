@@ -41,6 +41,25 @@ describe('http1 fallback bridge (h1)', () => {
     const res = await client(tr).echo(create(EchoRequestSchema, { input: 'hi' }))
     expect(res.output).toBe('echo:hi')
   })
+  it('count server-stream via explicit http1 (incremental, END frame)', async () => {
+    // Regression: the h1 bridge used to buffer the whole response through the
+    // unary path (a competing 'data' consumer), so the stream yielded zero
+    // frames and failed with "stream ended without END frame".
+    const tr = createHttp1Transport(undefined, base)
+    const iter = await client(tr).count(create(CountRequestSchema, { count: 3 }))
+    const idx: number[] = []
+    for await (const chunk of iter) idx.push(chunk.index)
+    expect(idx).toEqual([0, 1, 2])
+  })
+  it('count server-stream via auto mode against an h1-only peer', async () => {
+    // 'auto' probes the h2 handshake, sees the h1-only Go server, and must
+    // fall back to the h1 bridge for streams too.
+    const tr = createNodeTransport({ protocol: 'auto', base })
+    const iter = await client(tr).count(create(CountRequestSchema, { count: 3 }))
+    const idx: number[] = []
+    for await (const chunk of iter) idx.push(chunk.index)
+    expect(idx).toEqual([0, 1, 2])
+  })
 })
 
 describe('metadata / auth via headers', () => {

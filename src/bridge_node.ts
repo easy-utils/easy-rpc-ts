@@ -192,22 +192,58 @@ export function createHttp1Transport(agent?: http.Agent, base = ''): Transport {
       }
     },
     async openStream(req: Request): Promise<Stream> {
-      const res = await httpRequest(req, agent, base)
-      const source = (async function* () {
-        for await (const c of res.raw) yield c
-      })()
-      const framed = readFrames(source, undefined, gzipDecompress)
+      const res = await httpStream(req, agent, base)
+      const framed = readFrames(res.raw, undefined, gzipDecompress)
       return {
         async *[Symbol.asyncIterator]() {
           yield* streamPayloads(framed)
         },
-        cancel() { /* http1 closes on end */ },
+        cancel() { res.destroy() },
       }
     },
   }
 }
 
-function httpRequest(req: Request, agent?: http.Agent, base = ''): Promise<{ status: number; headers: Record<string, string>; body: Uint8Array; raw: AsyncIterable<Uint8Array> }> {
+/**
+ * HTTP/1.1 streaming request: resolves as soon as response HEADERS arrive, with
+ * the raw response readable as the SOLE consumer (no buffering, no competing
+ * 'data' listener). Server-streams are consumed incrementally here — the
+ * unary `httpRequest` below buffers the whole body and must never be used for
+ * a stream (doing so drains the socket before the caller reads it).
+ */
+function httpStream(
+  req: Request,
+  agent?: http.Agent,
+  base = '',
+): Promise<{ status: number; headers: Record<string, string>; raw: AsyncIterable<Uint8Array>; destroy: () => void }> {
+  const u = new URL(join(base, req.url))
+  return new Promise((resolve, reject) => {
+    const preq = http.request({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      method: req.method,
+      headers: headersToRecord(req.headers),
+      agent,
+    }, (resp) => {
+      const raw = resp as unknown as AsyncIterable<Uint8Array>
+      resolve({
+        status: resp.statusCode ?? 0,
+        headers: resp.headers as Record<string, string>,
+        raw,
+        destroy: () => { try { resp.destroy(); preq.destroy() } catch { /* noop */ } },
+      })
+    })
+    preq.on('error', reject)
+    if (req.signal !== undefined) {
+      if (req.signal.aborted) { preq.destroy(req.signal.reason as Error); return }
+      req.signal.addEventListener('abort', () => preq.destroy(req.signal?.reason as Error), { once: true })
+    }
+    preq.end(req.body ?? new Uint8Array(0))
+  })
+}
+
+function httpRequest(req: Request, agent?: http.Agent, base = ''): Promise<{ status: number; headers: Record<string, string>; body: Uint8Array }> {
   const u = new URL(join(base, req.url))
   return new Promise((resolve, reject) => {
     const preq = http.request({
@@ -219,16 +255,12 @@ function httpRequest(req: Request, agent?: http.Agent, base = ''): Promise<{ sta
       agent,
     }, (resp) => {
       const chunks: Uint8Array[] = []
-      const raw: AsyncIterable<Uint8Array> = (async function* () {
-        for await (const c of resp) yield c as Uint8Array
-      })()
       resp.on('data', (c: Uint8Array) => chunks.push(c))
       resp.on('end', () => {
         resolve({
           status: resp.statusCode ?? 0,
           headers: resp.headers as Record<string, string>,
           body: concatAll(chunks),
-          raw,
         })
       })
     })
