@@ -143,16 +143,22 @@ export interface ErrorDetail {
 
 // Runtime-agnostic base64 (no btoa/Buffer dependency; details are small).
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+/** Encode as UNPADDED standard base64 — matches Connect (`base64.RawStdEncoding`)
+ *  for error-detail `value` fields. */
 function base64Encode(b: Bytes): string {
   let out = ''
   for (let i = 0; i < b.length; i += 3) {
     const n = (b[i]! << 16) | ((b[i + 1] ?? 0) << 8) | (b[i + 2] ?? 0)
-    out += (B64[n >> 18] ?? '') + (B64[(n >> 12) & 63] ?? '') + (i + 1 < b.length ? B64[(n >> 6) & 63] ?? '' : '=') + (i + 2 < b.length ? B64[n & 63] ?? '' : '=')
+    out += (B64[n >> 18] ?? '') + (B64[(n >> 12) & 63] ?? '')
+    if (i + 1 < b.length) out += B64[(n >> 6) & 63] ?? ''
+    if (i + 2 < b.length) out += B64[n & 63] ?? ''
   }
   return out
 }
+/** Decode standard OR URL-safe base64, padded or unpadded (Connect sends
+ *  unpadded standard; be liberal on input). */
 function base64Decode(s: string): Bytes {
-  const clean = s.replace(/[^A-Za-z0-9+/]/g, '')
+  const clean = s.replace(/[^A-Za-z0-9+/_-]/g, '').replace(/-/g, '+').replace(/_/g, '/')
   const out = new Uint8Array((clean.length * 3) >> 2)
   let o = 0
   for (let i = 0; i < clean.length; i += 4) {
@@ -255,7 +261,8 @@ function encodeDetails(details: ErrorDetail[]): { type: string; value: string }[
   return details.map((d) => ({ type: d.type, value: base64Encode(d.value) }))
 }
 
-/** Parse the wire details array; skips malformed entries (matrix M7). */
+/** Parse the wire details array; skips malformed entries (matrix M7). Accepts
+ *  standard OR URL-safe base64, padded or unpadded (Connect sends unpadded). */
 function decodeDetails(v: unknown): ErrorDetail[] | undefined {
   if (!Array.isArray(v)) return undefined
   const out: ErrorDetail[] = []
@@ -264,8 +271,7 @@ function decodeDetails(v: unknown): ErrorDetail[] | undefined {
     const t = (el as { type?: unknown }).type
     const val = (el as { value?: unknown }).value
     if (typeof t !== 'string' || t === '' || typeof val !== 'string' || val === '') continue
-    // Strict base64: invalid chars / bad padding => skip the entry (M7).
-    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(val) || (val.length & 3) !== 0) continue
+    if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(val)) continue
     out.push({ type: t, value: base64Decode(val) })
   }
   return out.length > 0 ? out : undefined
@@ -517,6 +523,9 @@ export function muxTrailers(headers: Headers, trailers: Headers): Headers {
 export interface HandlerContext {
   /** Request metadata (HTTP headers). */
   readonly headers: Headers
+  /** Set a response header (non-trailer). Emitted as an HTTP response header on
+   *  both unary and server-stream responses. */
+  setHeader(key: string, value: string): void
   /** Set a trailing-metadata entry. For unary RPCs it is emitted as a
    *  `trailer-<key>` response header; for server-streams it is carried in the
    *  END frame's end-stream JSON `metadata`. */
@@ -541,7 +550,8 @@ export interface ServiceHandlers {
 export interface ResponseWriter {
   /** Set the HTTP status (called before the first `write`). */
   status(code: number): void
-  /** Set a response header (called before the first `write`). */
+  /** Add a response header value (called before the first `write`). Calling it
+   *  more than once for the same name accumulates multiple wire values. */
   header(name: string, value: string): void
   /** Write raw response bytes (already framed for stream methods). */
   write(chunk: Bytes): Promise<void>

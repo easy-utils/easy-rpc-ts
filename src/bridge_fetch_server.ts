@@ -35,7 +35,7 @@ export function toWebHandler(dispatch: ServerDispatch): WebHandler {
 
     const w: ResponseWriter = {
       status(code) { status = code },
-      header(name, value) { outHeaders.set(name, value) },
+      header(name, value) { outHeaders.append(name, value) },
       async write(chunk) { holder.c?.enqueue(chunk as Uint8Array) },
       async finish() {
         if (closed) return

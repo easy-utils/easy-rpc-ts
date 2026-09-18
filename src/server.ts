@@ -67,15 +67,21 @@ export function createServer(
       return fail(w, new RPCError(12, `unsupported connect-protocol-version: ${pv}`))
     }
 
+    // POST-only (spec §0). A known path with a non-POST verb is 405.
+    if (req.method !== undefined && req.method !== '' && req.method !== 'POST') {
+      return fail(w, new RPCError(2, `method ${req.method} not allowed`), 405)
+    }
+
+    // Unknown path -> 404 with code 12 (unimplemented), matching Connect.
     const spec = methods.find(m => m.path === pathname)
-    if (!spec) return fail(w, new RPCError(5, 'not found'))
+    if (!spec) return fail(w, new RPCError(12, 'unimplemented'), 404)
 
     // proto-only (spec §2): unary uses application/proto, server-stream uses
-    // application/connect+proto. JSON content types are rejected with 415.
+    // application/connect+proto. Any other content type is 415 (code 2/unknown).
     const expected = spec.serverStream ? CONTENT_TYPE_STREAM : CONTENT_TYPE_UNARY
     const got = (ct.split(';')[0] ?? '').trim().toLowerCase()
     if (got !== expected) {
-      return fail(w, new RPCError(3, `unsupported content-type: ${ct || '(none)'} (expected ${expected})`), 415)
+      return fail(w, new RPCError(2, `unsupported content-type: ${ct || '(none)'}`), 415)
     }
     if (body.length > maxBytes) {
       return fail(w, new RPCError(8, `request too large: ${body.length} > ${maxBytes}`))
@@ -85,38 +91,65 @@ export function createServer(
     const timeoutMs = parseTimeout(req.headers[HEADER_TIMEOUT]?.[0])
     const timedOut = (): RPCError => new RPCError(4, 'deadline exceeded')
 
-    // Trailing metadata set by the handler.
+    // Response headers + trailing metadata set by the handler.
+    const responseHeaders: Headers = {}
     const trailers: Headers = {}
+    const addTo = (bag: Headers, key: string, value: string) => {
+      const k = key.toLowerCase()
+      const cur = bag[k]
+      if (cur === undefined) bag[k] = [value]
+      else cur.push(value)
+    }
     const ctx: HandlerContext = {
       headers: req.headers,
+      setHeader(key: string, value: string) {
+        addTo(responseHeaders, key, value)
+      },
       setTrailer(key: string, value: string) {
-        const k = key.toLowerCase()
-        const cur = trailers[k]
-        if (cur === undefined) trailers[k] = [value]
-        else cur.push(value)
+        addTo(trailers, key, value)
       },
     }
 
     if (spec.serverStream) {
       const h = handlers.stream[spec.name]
-      if (!h) return fail(w, new RPCError(5, 'no handler'))
+      if (!h) return streamFail(w, new RPCError(12, 'no handler'))
       // Stream request body is ENVELOPED (spec §3.2): one data frame carrying
       // the single request message. Unframe it before dispatch.
+      // A server-stream request MUST carry exactly one enveloped message;
+      // zero frames or more than one => unimplemented (Connect semantics).
+      let frameCount: number
+      try {
+        frameCount = countFrames(body, maxBytes)
+      } catch (e) {
+        return streamFail(w, e instanceof RPCError ? e : new RPCError(13, String(e)))
+      }
+      if (frameCount !== 1) {
+        return streamFail(w, new RPCError(12, frameCount === 0 ? 'missing request message' : 'server-stream request must contain exactly one message'))
+      }
       let reqBody: Bytes
       try {
         reqBody = await readSingleFrame(body, maxBytes)
       } catch (e) {
-        return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)))
+        return streamFail(w, e instanceof RPCError ? e : new RPCError(13, String(e)))
       }
       // Stream: HTTP status is always 200; errors go into the END frame.
       w.status(200)
       w.header('content-type', CONTENT_TYPE_STREAM)
+      const applyStreamHeaders = () => {
+        for (const [k, v] of Object.entries(responseHeaders)) {
+          if (k === 'content-type') continue
+          for (const x of v) w.header(k, x)
+        }
+      }
       const wantsGzip = (req.headers[HEADER_STREAM_ACCEPT_ENCODING] ?? []).some(
         (v) => v.split(',').map((s) => s.trim()).includes(ENCODING_GZIP),
       )
       let wroteEnd = false
+      let headersApplied = false
+      const applyOnce = () => { if (!headersApplied) { headersApplied = true; applyStreamHeaders() } }
       const emit = async (data: Bytes, end: boolean): Promise<void> => {
         if (wroteEnd) return
+        applyOnce()
         if (end) {
           wroteEnd = true
           await w.write(frame(encodeEndStream(0, '', trailers), true))
@@ -145,6 +178,7 @@ export function createServer(
       } catch (e) {
         // Propagate the failure in the END frame (HTTP stays 200).
         const err = e instanceof RPCError ? e : new RPCError(13, String(e))
+        applyOnce()
         if (!wroteEnd) {
           wroteEnd = true
           await w.write(frame(encodeEndStream(err.code, err.message, trailers, err.details), true))
@@ -152,6 +186,7 @@ export function createServer(
         await w.finish()
         return
       }
+      applyOnce()
       if (!wroteEnd) await w.write(frame(encodeEndStream(0, '', trailers), true))
       await w.finish()
       return
@@ -160,17 +195,33 @@ export function createServer(
     // Unary: resolve fully BEFORE writing so a thrown error can set a real status.
     const h = handlers.unary[spec.name]
     if (!h) return fail(w, new RPCError(5, 'no handler'))
+    // Request compression (spec §3.5): Connect unary uses `Content-Encoding:
+    // gzip` on the message body; decompress before dispatch.
+    let inBody = body
+    const reqEnc = (req.headers[HEADER_CONTENT_ENCODING]?.[0] ?? '').trim().toLowerCase()
+    if (reqEnc !== '' && reqEnc !== ENCODING_GZIP) {
+      return fail(w, new RPCError(12, `unsupported content-encoding: ${reqEnc}`))
+    }
+    if (reqEnc === ENCODING_GZIP && inBody.length > 0) {
+      try { inBody = gzipDecompress(inBody) } catch (e) {
+        return fail(w, new RPCError(13, `corrupt request gzip: ${String(e)}`))
+      }
+    }
     let out: Bytes
     try {
       out = timeoutMs > 0 ? await Promise.race([
-        h(body, ctx),
+        h(inBody, ctx),
         new Promise<never>((_, rej) => setTimeout(() => rej(timedOut()), timeoutMs)),
-      ]) : await h(body, ctx)
+      ]) : await h(inBody, ctx)
     } catch (e) {
-      return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), undefined, trailers)
+      return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), undefined, trailers, responseHeaders)
     }
     w.status(200)
     w.header('content-type', CONTENT_TYPE_UNARY)
+    for (const [k, v] of Object.entries(responseHeaders)) {
+      if (k === 'content-type') continue
+      for (const x of v) w.header(k, x)
+    }
     // Unary: compress the whole body when the client accepts gzip (spec §3.5).
     const wantsGzip = acceptsUnaryGzip(req.headers)
     if (wantsGzip && out.length >= COMPRESS_MIN_BYTES) {
@@ -178,7 +229,7 @@ export function createServer(
       out = gzipCompress(out)
     }
     for (const [k, v] of Object.entries(muxTrailers({}, trailers))) {
-      w.header(k, v[0] ?? '')
+      for (const x of v) w.header(k, x)
     }
     await w.write(out)
     await w.finish()
@@ -189,6 +240,21 @@ function acceptsUnaryGzip(headers: Headers): boolean {
   return (headers[HEADER_ACCEPT_ENCODING] ?? []).some(
     (v) => v.split(',').map((s) => s.trim()).includes(ENCODING_GZIP),
   )
+}
+
+/** Count the frames in an enveloped request body (server-stream request must
+ *  be exactly one frame). Throws on a corrupt frame header. */
+function countFrames(body: Bytes, maxBytes: number): number {
+  let off = 0
+  let n = 0
+  while (off < body.length) {
+    if (off + 5 > body.length) throw new RPCError(13, 'truncated frame header')
+    const len = new DataView(body.buffer, body.byteOffset + off, body.byteLength - off).getUint32(1, false)
+    if (len > maxBytes) throw new RPCError(8, `frame too large: ${len} > ${maxBytes}`)
+    off += 5 + len
+    n++
+  }
+  return n
 }
 
 /** Read exactly one frame (the enveloped server-stream request message).
@@ -210,14 +276,31 @@ async function readSingleFrame(body: Bytes, maxBytes: number): Promise<Bytes> {
   return body.slice(5, 5 + len)
 }
 
+/** Emit a server-stream failure: HTTP 200 + END frame carrying the error
+ *  (Connect: a server-stream error is never an HTTP status). */
+async function streamFail(w: ResponseWriter, err: RPCError, trailers: Headers = {}, responseHeaders: Headers = {}): Promise<void> {
+  w.status(200)
+  w.header('content-type', CONTENT_TYPE_STREAM)
+  for (const [k, v] of Object.entries(responseHeaders)) {
+    if (k === 'content-type') continue
+    for (const x of v) w.header(k, x)
+  }
+  await w.write(frame(encodeEndStream(err.code, err.message, trailers, err.details), true))
+  await w.finish()
+}
+
 /** Emit a non-200 error response (before any stream body has been written).
  *  Unary errors use the Connect HTTP-status + JSON body shape; trailers are
  *  muxed as `trailer-*` headers. */
-async function fail(w: ResponseWriter, err: RPCError, statusOverride?: number, trailers: Headers = {}): Promise<void> {
+async function fail(w: ResponseWriter, err: RPCError, statusOverride?: number, trailers: Headers = {}, responseHeaders: Headers = {}): Promise<void> {
   w.status(statusOverride ?? httpStatus(err.code))
   w.header('content-type', 'application/json')
+  for (const [k, v] of Object.entries(responseHeaders)) {
+    if (k === 'content-type') continue
+    for (const x of v) w.header(k, x)
+  }
   for (const [k, v] of Object.entries(muxTrailers({}, trailers))) {
-    w.header(k, v[0] ?? '')
+    for (const x of v) w.header(k, x)
   }
   await w.write(encodeErrorJson(err.code, err.message, err.details))
   await w.finish()
@@ -236,7 +319,7 @@ export function concat(chunks: Bytes[]): Bytes {
  *  streaming responses reach the client immediately. */
 function nodeWriter(res: nodeHttp.ServerResponse): ResponseWriter {
   let status = 200
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string | string[]> = {}
   let started = false
   const start = () => {
     if (started) return
@@ -246,7 +329,12 @@ function nodeWriter(res: nodeHttp.ServerResponse): ResponseWriter {
   }
   return {
     status(code) { status = code },
-    header(name, value) { headers[name] = value },
+    header(name, value) {
+      const cur = headers[name]
+      if (cur === undefined) headers[name] = value
+      else if (Array.isArray(cur)) cur.push(value)
+      else headers[name] = [cur, value]
+    },
     async write(chunk) {
       start()
       await new Promise<void>(resolve => {
@@ -306,7 +394,7 @@ export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.H
       }
       const url = String(headers[':path'] ?? '/')
       let status = 200
-      const outHeaders: Record<string, string> = {}
+      const outHeaders: Record<string, string | string[]> = {}
       let started = false
       const start = () => {
         if (started) return
@@ -315,7 +403,12 @@ export function http2Server(handler: ServerHandler, secure = false): nodeHttp2.H
       }
       const w: ResponseWriter = {
         status(code) { status = code },
-        header(name, value) { outHeaders[name] = value },
+        header(name, value) {
+          const cur = outHeaders[name]
+          if (cur === undefined) outHeaders[name] = value
+          else if (Array.isArray(cur)) cur.push(value)
+          else outHeaders[name] = [cur, value]
+        },
         async write(chunk) {
           start()
           await new Promise<void>(resolve => stream.write(Buffer.from(chunk), () => resolve()))
