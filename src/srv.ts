@@ -1,14 +1,18 @@
-import { createServer, nodeServer } from './server.js'
+import { createServer, http2Server, nodeServer } from './server.js'
 import { create } from '@bufbuild/protobuf'
 import {
   BigResponseSchema,
+  BigStreamResponseSchema,
   CountResponseSchema,
   CountTrailerResponseSchema,
+  EchoBytesResponseSchema,
   EchoMetaResponseSchema,
   EchoResponseSchema,
   EchoTrailerResponseSchema,
+  EmptyResponseSchema,
   FailResponseSchema,
   HealthResponseSchema,
+  SleepResponseSchema,
   StreamFailDetailsResponseSchema,
   StreamFailResponseSchema,
 } from './easyrpc/conformance/v1/conformance_pb.js'
@@ -56,6 +60,24 @@ const impl: any = {
       ])
     },
   }),
+  echoBytes: async (req: any) => create(EchoBytesResponseSchema, { data: req.data } as any),
+  sleep: async (req: any) => {
+    const ms = Number(req.millis ?? 0)
+    await new Promise(r => setTimeout(r, Math.max(0, ms)))
+    return create(SleepResponseSchema, { ok: true })
+  },
+  empty: async () => create(EmptyResponseSchema, {}),
+  bigStream: async (req: any) => {
+    const n = Number(req.count ?? 3)
+    const size = Number(req.size ?? 0)
+    const payload = new Uint8Array(size)
+    return {
+      async *[Symbol.asyncIterator]() {
+        for (let i = 0; i < n; i++) yield create(BigStreamResponseSchema, { index: i, size } as any)
+        void payload
+      },
+    }
+  },
   echoTrailer: async (in_: any, ctx: any) => {
     ctx?.setTrailer?.('x-trl', 'unary-' + String(in_.input ?? ''))
     return create(EchoTrailerResponseSchema, { output: 'trailer:' + String(in_.input ?? '') } as any)
@@ -73,4 +95,10 @@ const impl: any = {
 const handlers = ConformanceServiceHandlers(impl)
 const dispatch = createServer(methodSpecs as any, handlers)
 
-nodeServer(dispatch).listen(port, '127.0.0.1', () => console.log('ts on', port))
+// HTTP_PROTOCOL=h2c serves cleartext HTTP/2 prior-knowledge (h2c); default h1.
+const proto = process.env.HTTP_PROTOCOL ?? 'h1'
+if (proto === 'h2c') {
+  http2Server(dispatch).listen(port, '127.0.0.1', () => console.log('ts h2c on', port))
+} else {
+  nodeServer(dispatch).listen(port, '127.0.0.1', () => console.log('ts on', port))
+}

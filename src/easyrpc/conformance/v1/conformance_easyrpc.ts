@@ -7,7 +7,7 @@ import type { ServiceHandlers } from '../../../protocol.js'
 
 /** Per-call options: cancellation, extra metadata, and unary trailer hook. */
 export interface CallOptions { signal?: AbortSignal; metadata?: Headers; onTrailer?: (trailers: Headers) => void }
-import { HealthRequest, HealthResponse, EchoRequest, EchoResponse, CountRequest, CountResponse, FailRequest, FailResponse, StreamFailRequest, StreamFailResponse, EchoMetaRequest, EchoMetaResponse, BigRequest, BigResponse, FailDetailsRequest, FailDetailsResponse, StreamFailDetailsRequest, StreamFailDetailsResponse, EchoTrailerRequest, EchoTrailerResponse, CountTrailerRequest, CountTrailerResponse, HealthRequestSchema, HealthResponseSchema, EchoRequestSchema, EchoResponseSchema, CountRequestSchema, CountResponseSchema, FailRequestSchema, FailResponseSchema, StreamFailRequestSchema, StreamFailResponseSchema, EchoMetaRequestSchema, EchoMetaResponseSchema, BigRequestSchema, BigResponseSchema, FailDetailsRequestSchema, FailDetailsResponseSchema, StreamFailDetailsRequestSchema, StreamFailDetailsResponseSchema, EchoTrailerRequestSchema, EchoTrailerResponseSchema, CountTrailerRequestSchema, CountTrailerResponseSchema } from './conformance_pb.js'
+import { HealthRequest, HealthResponse, EchoRequest, EchoResponse, CountRequest, CountResponse, FailRequest, FailResponse, StreamFailRequest, StreamFailResponse, EchoMetaRequest, EchoMetaResponse, BigRequest, BigResponse, FailDetailsRequest, FailDetailsResponse, StreamFailDetailsRequest, StreamFailDetailsResponse, EchoTrailerRequest, EchoTrailerResponse, CountTrailerRequest, CountTrailerResponse, EchoBytesRequest, EchoBytesResponse, SleepRequest, SleepResponse, EmptyRequest, EmptyResponse, BigStreamRequest, BigStreamResponse, HealthRequestSchema, HealthResponseSchema, EchoRequestSchema, EchoResponseSchema, CountRequestSchema, CountResponseSchema, FailRequestSchema, FailResponseSchema, StreamFailRequestSchema, StreamFailResponseSchema, EchoMetaRequestSchema, EchoMetaResponseSchema, BigRequestSchema, BigResponseSchema, FailDetailsRequestSchema, FailDetailsResponseSchema, StreamFailDetailsRequestSchema, StreamFailDetailsResponseSchema, EchoTrailerRequestSchema, EchoTrailerResponseSchema, CountTrailerRequestSchema, CountTrailerResponseSchema, EchoBytesRequestSchema, EchoBytesResponseSchema, SleepRequestSchema, SleepResponseSchema, EmptyRequestSchema, EmptyResponseSchema, BigStreamRequestSchema, BigStreamResponseSchema } from './conformance_pb.js'
 
 export const methodSpecs: MethodSpec[] = [
   { service: "easyrpc.conformance.v1.ConformanceService", name: "Health", path: "/easyrpc.conformance.v1.ConformanceService/Health", clientStream: false, serverStream: false },
@@ -21,6 +21,10 @@ export const methodSpecs: MethodSpec[] = [
   { service: "easyrpc.conformance.v1.ConformanceService", name: "StreamFailDetails", path: "/easyrpc.conformance.v1.ConformanceService/StreamFailDetails", clientStream: false, serverStream: true },
   { service: "easyrpc.conformance.v1.ConformanceService", name: "EchoTrailer", path: "/easyrpc.conformance.v1.ConformanceService/EchoTrailer", clientStream: false, serverStream: false },
   { service: "easyrpc.conformance.v1.ConformanceService", name: "CountTrailer", path: "/easyrpc.conformance.v1.ConformanceService/CountTrailer", clientStream: false, serverStream: true },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "EchoBytes", path: "/easyrpc.conformance.v1.ConformanceService/EchoBytes", clientStream: false, serverStream: false },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "Sleep", path: "/easyrpc.conformance.v1.ConformanceService/Sleep", clientStream: false, serverStream: false },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "Empty", path: "/easyrpc.conformance.v1.ConformanceService/Empty", clientStream: false, serverStream: false },
+  { service: "easyrpc.conformance.v1.ConformanceService", name: "BigStream", path: "/easyrpc.conformance.v1.ConformanceService/BigStream", clientStream: false, serverStream: true },
 ]
 
 export interface ConformanceServiceClient {
@@ -35,6 +39,10 @@ export interface ConformanceServiceClient {
   streamFailDetails(req: MessageInitShape<typeof StreamFailDetailsRequestSchema>, options?: CallOptions): Promise<ServerStream<StreamFailDetailsResponse>>
   echoTrailer(req: MessageInitShape<typeof EchoTrailerRequestSchema>, options?: CallOptions): Promise<EchoTrailerResponse>
   countTrailer(req: MessageInitShape<typeof CountTrailerRequestSchema>, options?: CallOptions): Promise<ServerStream<CountTrailerResponse>>
+  echoBytes(req: MessageInitShape<typeof EchoBytesRequestSchema>, options?: CallOptions): Promise<EchoBytesResponse>
+  sleep(req: MessageInitShape<typeof SleepRequestSchema>, options?: CallOptions): Promise<SleepResponse>
+  empty(req: MessageInitShape<typeof EmptyRequestSchema>, options?: CallOptions): Promise<EmptyResponse>
+  bigStream(req: MessageInitShape<typeof BigStreamRequestSchema>, options?: CallOptions): Promise<ServerStream<BigStreamResponse>>
 }
 export function createConformanceServiceClient(transport: Transport): ConformanceServiceClient {
   return {
@@ -171,6 +179,53 @@ export function createConformanceServiceClient(transport: Transport): Conformanc
       }
       return out
     },
+    async echoBytes(reqInit, options = {}) {
+      const req = create(EchoBytesRequestSchema, reqInit)
+      const ct = 'application/proto'
+      const md: Headers = { 'content-type': [ct], accept: [ct], 'connect-protocol-version': ['1'], ...(options.metadata ?? {}) }
+      const body = toBinary(EchoBytesRequestSchema, req)
+      const call = { url: "/easyrpc.conformance.v1.ConformanceService/EchoBytes", headers: md, body, ...(options.signal !== undefined ? { signal: options.signal } : {}) }
+      const res = await transport.send(call)
+      if (res.error) throw res.error
+      options.onTrailer?.(res.trailers ?? {})
+      return fromBinary(EchoBytesResponseSchema, res.body)
+    },
+    async sleep(reqInit, options = {}) {
+      const req = create(SleepRequestSchema, reqInit)
+      const ct = 'application/proto'
+      const md: Headers = { 'content-type': [ct], accept: [ct], 'connect-protocol-version': ['1'], ...(options.metadata ?? {}) }
+      const body = toBinary(SleepRequestSchema, req)
+      const call = { url: "/easyrpc.conformance.v1.ConformanceService/Sleep", headers: md, body, ...(options.signal !== undefined ? { signal: options.signal } : {}) }
+      const res = await transport.send(call)
+      if (res.error) throw res.error
+      options.onTrailer?.(res.trailers ?? {})
+      return fromBinary(SleepResponseSchema, res.body)
+    },
+    async empty(reqInit, options = {}) {
+      const req = create(EmptyRequestSchema, reqInit)
+      const ct = 'application/proto'
+      const md: Headers = { 'content-type': [ct], accept: [ct], 'connect-protocol-version': ['1'], ...(options.metadata ?? {}) }
+      const body = toBinary(EmptyRequestSchema, req)
+      const call = { url: "/easyrpc.conformance.v1.ConformanceService/Empty", headers: md, body, ...(options.signal !== undefined ? { signal: options.signal } : {}) }
+      const res = await transport.send(call)
+      if (res.error) throw res.error
+      options.onTrailer?.(res.trailers ?? {})
+      return fromBinary(EmptyResponseSchema, res.body)
+    },
+    async bigStream(reqInit, options = {}) {
+      const req = create(BigStreamRequestSchema, reqInit)
+      const ct = 'application/connect+proto'
+      const md: Headers = { 'content-type': [ct], accept: [ct], 'connect-protocol-version': ['1'], ...(options.metadata ?? {}) }
+      const body = frame(toBinary(BigStreamRequestSchema, req))
+      const call = { url: "/easyrpc.conformance.v1.ConformanceService/BigStream", headers: md, body, ...(options.signal !== undefined ? { signal: options.signal } : {}) }
+      const stream = await transport.openStream(call)
+      const out: ServerStream<BigStreamResponse> = {
+        async *[Symbol.asyncIterator]() { for await (const chunk of stream) yield fromBinary(BigStreamResponseSchema, chunk) },
+        trailers: () => stream.trailers(),
+        cancel: () => stream.cancel(),
+      }
+      return out
+    },
   }
 }
 
@@ -186,6 +241,10 @@ export interface ConformanceServiceServiceImpl {
   streamFailDetails(req: StreamFailDetailsRequest, ctx: HandlerContext): AsyncIterable<MessageInitShape<typeof StreamFailDetailsResponseSchema>>
   echoTrailer(req: EchoTrailerRequest, ctx: HandlerContext): Promise<MessageInitShape<typeof EchoTrailerResponseSchema>>
   countTrailer(req: CountTrailerRequest, ctx: HandlerContext): AsyncIterable<MessageInitShape<typeof CountTrailerResponseSchema>>
+  echoBytes(req: EchoBytesRequest, ctx: HandlerContext): Promise<MessageInitShape<typeof EchoBytesResponseSchema>>
+  sleep(req: SleepRequest, ctx: HandlerContext): Promise<MessageInitShape<typeof SleepResponseSchema>>
+  empty(req: EmptyRequest, ctx: HandlerContext): Promise<MessageInitShape<typeof EmptyResponseSchema>>
+  bigStream(req: BigStreamRequest, ctx: HandlerContext): AsyncIterable<MessageInitShape<typeof BigStreamResponseSchema>>
 }
 
 export function ConformanceServiceHandlers(impl: ConformanceServiceServiceImpl): ServiceHandlers {
@@ -244,6 +303,26 @@ export function ConformanceServiceHandlers(impl: ConformanceServiceServiceImpl):
   stream["CountTrailer"] = async (input, ctx, emit) => {
     const req = fromBinary(CountTrailerRequestSchema, input)
     for await (const v of await impl.countTrailer(req, ctx)) { const msg = create(CountTrailerResponseSchema, v); await emit(toBinary(CountTrailerResponseSchema, msg), false) }
+    await emit(new Uint8Array(0), true)
+  }
+  unary["EchoBytes"] = async (input, ctx) => {
+    const req = fromBinary(EchoBytesRequestSchema, input)
+    const v = create(EchoBytesResponseSchema, await impl.echoBytes(req, ctx))
+    return toBinary(EchoBytesResponseSchema, v)
+  }
+  unary["Sleep"] = async (input, ctx) => {
+    const req = fromBinary(SleepRequestSchema, input)
+    const v = create(SleepResponseSchema, await impl.sleep(req, ctx))
+    return toBinary(SleepResponseSchema, v)
+  }
+  unary["Empty"] = async (input, ctx) => {
+    const req = fromBinary(EmptyRequestSchema, input)
+    const v = create(EmptyResponseSchema, await impl.empty(req, ctx))
+    return toBinary(EmptyResponseSchema, v)
+  }
+  stream["BigStream"] = async (input, ctx, emit) => {
+    const req = fromBinary(BigStreamRequestSchema, input)
+    for await (const v of await impl.bigStream(req, ctx)) { const msg = create(BigStreamResponseSchema, v); await emit(toBinary(BigStreamResponseSchema, msg), false) }
     await emit(new Uint8Array(0), true)
   }
   return { unary, stream }

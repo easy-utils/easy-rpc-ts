@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createFetchTransport } from '../src'
+import { conformanceTransport } from './transports'
 import { createConformanceServiceClient } from '../src/easyrpc/conformance/v1/conformance_easyrpc'
 import { create } from '@bufbuild/protobuf'
 import {
@@ -7,14 +7,18 @@ import {
   CountRequestSchema,
   EchoMetaRequestSchema,
   EchoRequestSchema,
+  BigStreamRequestSchema,
+  EchoBytesRequestSchema,
   EchoTrailerRequestSchema,
+  EmptyRequestSchema,
+  SleepRequestSchema,
   FailDetailsRequestSchema,
   StreamFailDetailsRequestSchema,
   StreamFailRequestSchema,
 } from '../src/easyrpc/conformance/v1/conformance_pb'
 
 const base = process.env.EASY_RPC_BASE ?? 'http://127.0.0.1:18888'
-const client = () => createConformanceServiceClient(createFetchTransport(base))
+const client = () => createConformanceServiceClient(conformanceTransport(base).transport)
 describe('TS -> interop', () => {
   it('echo unary proto', async () => {
     const res = await client().echo(create(EchoRequestSchema, { input: 'hi' }))
@@ -80,6 +84,31 @@ describe('TS -> interop (error details, spec §4.1)', () => {
     expect(re?.code).toBe(13)
     expect(re?.details?.[0]?.type).toBe('t/stream')
     expect(new TextDecoder().decode(re?.details?.[0]?.value ?? new Uint8Array())).toBe('sd')
+  })
+})
+
+describe('TS -> interop (extended shapes)', () => {
+  it('echoBytes: non-UTF-8 round-trip', async () => {
+    const data = new Uint8Array([0, 1, 2, 0xff, 0xfe, 0x80])
+    const res = await client().echoBytes(create(EchoBytesRequestSchema, { data }))
+    expect(Array.from(res.data)).toEqual(Array.from(data))
+  })
+  it('empty: empty message round-trip', async () => {
+    const res = await client().empty(create(EmptyRequestSchema, {}))
+    expect(res.$typeName).toBe('easyrpc.conformance.v1.EmptyResponse')
+  })
+  it('sleep: client cancel surfaces an error', async () => {
+    let err: unknown = null
+    try {
+      await client().sleep(create(SleepRequestSchema, { millis: 500 }), { signal: AbortSignal.timeout(100) })
+    } catch (e) { err = e }
+    expect(err).not.toBeNull()
+  })
+  it('bigStream: many frames with declared size', async () => {
+    const stream = await client().bigStream(create(BigStreamRequestSchema, { count: 4, size: 2048 }))
+    const idx: number[] = []
+    for await (const c of stream) idx.push(c.index)
+    expect(idx).toEqual([0, 1, 2, 3])
   })
 })
 

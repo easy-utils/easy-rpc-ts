@@ -73,26 +73,32 @@ export function createNodeTransport(opts: NodeTransportOptions = {}): Transport 
   async function doSend(req: Request): Promise<Response> {
     const session = connect(req.url)
     const stream = session.request(headersFor(req, false, opts.base))
-    if (req.signal !== undefined) {
-      const kill = () => { try { stream.close(); session.close() } catch { /* noop */ } }
-      if (req.signal.aborted) kill()
-      else req.signal.addEventListener('abort', kill, { once: true })
-    }
     const chunks: Uint8Array[] = []
     const headers: HeadersT = {}
-    const status = await new Promise<number>((resolve, reject) => {
+    let statusCode = 200
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        try { stream.close(); session.close() } catch { /* noop */ }
+        reject(new RPCError(1, 'canceled'))
+      }
+      if (req.signal !== undefined) {
+        if (req.signal.aborted) { abort(); return }
+        req.signal.addEventListener('abort', abort, { once: true })
+      }
       stream.on('response', (h: http2.IncomingHttpHeaders) => {
+        if (h[':status'] !== undefined) statusCode = Number(h[':status'])
         for (const [k, v] of Object.entries(h)) {
           if (k.startsWith(':')) continue
           headers[k] = Array.isArray(v) ? (v as string[]) : [String(v)]
         }
       })
       stream.on('data', (c: Uint8Array) => chunks.push(c))
-      stream.on('end', () => resolve(Number(headers[':status']?.[0] ?? 200)))
+      stream.on('end', () => resolve())
       stream.on('error', reject)
       stream.end(req.body ?? new Uint8Array(0))
     })
     session.close()
+    const status = statusCode
     const { headers: h2, trailers } = demuxTrailers(headers)
     let body = concatAll(chunks)
     if ((h2[HEADER_CONTENT_ENCODING]?.[0] ?? '') === ENCODING_GZIP && body.length > 0) {
