@@ -146,6 +146,11 @@ afterAll(async () => {
 const connectClient = (): Client<typeof ConformanceServiceDesc> =>
   createClient(ConformanceServiceDesc, createConnectTransport({ baseUrl: easyBase, httpVersion: '1.1' }))
 
+// JSON codec variant: the official client sends application/json /
+// application/connect+json; our server must round-trip it.
+const connectJsonClient = (): Client<typeof ConformanceServiceDesc> =>
+  createClient(ConformanceServiceDesc, createConnectTransport({ baseUrl: easyBase, httpVersion: '1.1', useBinaryFormat: false }))
+
 describe('@connectrpc client -> easy-rpc server', () => {
   it('unary: echo', async () => {
     const res = await connectClient().echo({ input: 'hi' })
@@ -160,6 +165,21 @@ describe('@connectrpc client -> easy-rpc server', () => {
     for await (const c of connectClient().count({ count: 3 })) idx.push(c.index)
     expect(idx).toEqual([0, 1, 2])
   })
+  it('json codec: unary echo', async () => {
+    const res = await connectJsonClient().echo({ input: 'hi' })
+    expect(res.output).toBe('echo:hi')
+  })
+  it('json codec: server-stream count', async () => {
+    const idx: number[] = []
+    for await (const c of connectJsonClient().count({ count: 3 })) idx.push(c.index)
+    expect(idx).toEqual([0, 1, 2])
+  })
+  it('json codec: unary error', async () => {
+    let err: unknown = null
+    try { await connectJsonClient().fail({ message: 'nope' }) } catch (e) { err = e }
+    expect((err as { code?: number })?.code).toBe(3)
+  })
+
   it('unary error: ConnectError code + JSON body', async () => {
     let err: unknown = null
     try { await connectClient().fail({ message: 'nope' }) } catch (e) { err = e }
