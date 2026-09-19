@@ -31,6 +31,7 @@ import {
   ENCODING_GZIP,
   HEADER_ACCEPT_ENCODING,
   HEADER_CONTENT_ENCODING,
+  HEADER_STREAM_CONTENT_ENCODING,
   HEADER_PROTOCOL_VERSION,
   HEADER_STREAM_ACCEPT_ENCODING,
   HEADER_TIMEOUT,
@@ -154,6 +155,10 @@ export function createServer(
       const wantsGzip = (req.headers[HEADER_STREAM_ACCEPT_ENCODING] ?? []).some(
         (v) => v.split(',').map((s) => s.trim()).includes(ENCODING_GZIP),
       )
+      // Advertise the negotiated frame compression (Connect-Content-Encoding),
+      // required so a Connect client builds a decompression pool. Frames below
+      // the threshold still go uncompressed (the per-frame flag decides).
+      if (wantsGzip) w.header(HEADER_STREAM_CONTENT_ENCODING, ENCODING_GZIP)
       let wroteEnd = false
       let headersApplied = false
       const applyOnce = () => { if (!headersApplied) { headersApplied = true; applyStreamHeaders() } }
