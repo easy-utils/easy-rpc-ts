@@ -371,6 +371,36 @@ export const CONNECT_PROTOCOL_VERSION = '1'
 export const CONTENT_TYPE_UNARY = 'application/proto'
 export const CONTENT_TYPE_STREAM = 'application/connect+proto'
 
+/** Message codec: proto binary (default) or proto3 JSON. */
+export type ContentKind = 'proto' | 'json'
+
+export const CONTENT_TYPE_UNARY_JSON = 'application/json'
+export const CONTENT_TYPE_STREAM_JSON = 'application/connect+json'
+
+/** Map a request Content-Type to a [ContentKind], or null when unsupported. */
+export function contentKindOf(contentType: string): ContentKind | null {
+  const ct = contentType.split(';')[0]!.trim().toLowerCase()
+  if (ct === CONTENT_TYPE_UNARY || ct === CONTENT_TYPE_STREAM) return 'proto'
+  if (ct === CONTENT_TYPE_UNARY_JSON || ct === CONTENT_TYPE_STREAM_JSON) return 'json'
+  return null
+}
+
+/** The Content-Type a response uses for the given shape + codec. */
+export function contentTypeFor(serverStream: boolean, kind: ContentKind): string {
+  if (kind === 'json') return serverStream ? CONTENT_TYPE_STREAM_JSON : CONTENT_TYPE_UNARY_JSON
+  return serverStream ? CONTENT_TYPE_STREAM : CONTENT_TYPE_UNARY
+}
+
+/** The request Content-Type the client sends for the given shape + codec. */
+export function requestContentType(serverStream: boolean, kind: ContentKind): string {
+  return contentTypeFor(serverStream, kind)
+}
+
+/** Alias used by generated clients (shape + codec -> content type). */
+export function contentKindHeader(serverStream: boolean, kind: ContentKind): string {
+  return contentTypeFor(serverStream, kind)
+}
+
 /** Encode a single streaming frame. */
 export function frame(
   payload: Bytes,
@@ -523,6 +553,9 @@ export function muxTrailers(headers: Headers, trailers: Headers): Headers {
 export interface HandlerContext {
   /** Request metadata (HTTP headers). */
   readonly headers: Headers
+  /** Message codec the request arrived with; generated handlers decode/encode
+   *  the raw message bytes accordingly. */
+  readonly kind: ContentKind
   /** Set a response header (non-trailer). Emitted as an HTTP response header on
    *  both unary and server-stream responses. */
   setHeader(key: string, value: string): void

@@ -19,7 +19,12 @@ import type {
 } from './protocol.js'
 import {
   CONTENT_TYPE_STREAM,
+  CONTENT_TYPE_STREAM_JSON,
   CONTENT_TYPE_UNARY,
+  CONTENT_TYPE_UNARY_JSON,
+  contentKindOf,
+  contentTypeFor,
+  type ContentKind,
   CONNECT_PROTOCOL_VERSION,
   COMPRESS_MIN_BYTES,
   DEFAULT_MAX_MESSAGE_BYTES,
@@ -76,11 +81,13 @@ export function createServer(
     const spec = methods.find(m => m.path === pathname)
     if (!spec) return fail(w, new RPCError(12, 'unimplemented'), 404)
 
-    // proto-only (spec §2): unary uses application/proto, server-stream uses
-    // application/connect+proto. Any other content type is 415 (code 2/unknown).
-    const expected = spec.serverStream ? CONTENT_TYPE_STREAM : CONTENT_TYPE_UNARY
-    const got = (ct.split(';')[0] ?? '').trim().toLowerCase()
-    if (got !== expected) {
+    // codec negotiation (spec §2): proto (default) or proto3 JSON. The content
+    // type also encodes the shape (unary vs stream), which must match the
+    // method. Unknown content type or wrong shape => 415 code 2.
+    const ctBase = ct.split(';')[0]!.trim().toLowerCase()
+    const kind = contentKindOf(ct)
+    const streamShape = ctBase === CONTENT_TYPE_STREAM || ctBase === CONTENT_TYPE_STREAM_JSON
+    if (kind === null || streamShape !== spec.serverStream) {
       return fail(w, new RPCError(2, `unsupported content-type: ${ct || '(none)'}`), 415)
     }
     if (body.length > maxBytes) {
@@ -102,6 +109,7 @@ export function createServer(
     }
     const ctx: HandlerContext = {
       headers: req.headers,
+      kind,
       setHeader(key: string, value: string) {
         addTo(responseHeaders, key, value)
       },
@@ -110,9 +118,11 @@ export function createServer(
       },
     }
 
+    const contentType = contentTypeFor(spec.serverStream, kind)
+
     if (spec.serverStream) {
       const h = handlers.stream[spec.name]
-      if (!h) return streamFail(w, new RPCError(12, 'no handler'))
+      if (!h) return streamFail(w, new RPCError(12, 'no handler'), {}, {}, kind)
       // Stream request body is ENVELOPED (spec §3.2): one data frame carrying
       // the single request message. Unframe it before dispatch.
       // A server-stream request MUST carry exactly one enveloped message;
@@ -121,20 +131,20 @@ export function createServer(
       try {
         frameCount = countFrames(body, maxBytes)
       } catch (e) {
-        return streamFail(w, e instanceof RPCError ? e : new RPCError(13, String(e)))
+        return streamFail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), {}, {}, kind)
       }
       if (frameCount !== 1) {
-        return streamFail(w, new RPCError(12, frameCount === 0 ? 'missing request message' : 'server-stream request must contain exactly one message'))
+        return streamFail(w, new RPCError(12, frameCount === 0 ? 'missing request message' : 'server-stream request must contain exactly one message'), {}, {}, kind)
       }
       let reqBody: Bytes
       try {
         reqBody = await readSingleFrame(body, maxBytes)
       } catch (e) {
-        return streamFail(w, e instanceof RPCError ? e : new RPCError(13, String(e)))
+        return streamFail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), {}, {}, kind)
       }
       // Stream: HTTP status is always 200; errors go into the END frame.
       w.status(200)
-      w.header('content-type', CONTENT_TYPE_STREAM)
+      w.header('content-type', contentType)
       const applyStreamHeaders = () => {
         for (const [k, v] of Object.entries(responseHeaders)) {
           if (k === 'content-type') continue
@@ -217,7 +227,7 @@ export function createServer(
       return fail(w, e instanceof RPCError ? e : new RPCError(13, String(e)), undefined, trailers, responseHeaders)
     }
     w.status(200)
-    w.header('content-type', CONTENT_TYPE_UNARY)
+    w.header('content-type', contentType)
     for (const [k, v] of Object.entries(responseHeaders)) {
       if (k === 'content-type') continue
       for (const x of v) w.header(k, x)
@@ -278,9 +288,9 @@ async function readSingleFrame(body: Bytes, maxBytes: number): Promise<Bytes> {
 
 /** Emit a server-stream failure: HTTP 200 + END frame carrying the error
  *  (Connect: a server-stream error is never an HTTP status). */
-async function streamFail(w: ResponseWriter, err: RPCError, trailers: Headers = {}, responseHeaders: Headers = {}): Promise<void> {
+async function streamFail(w: ResponseWriter, err: RPCError, trailers: Headers = {}, responseHeaders: Headers = {}, kind: ContentKind = 'proto'): Promise<void> {
   w.status(200)
-  w.header('content-type', CONTENT_TYPE_STREAM)
+  w.header('content-type', contentTypeFor(true, kind))
   for (const [k, v] of Object.entries(responseHeaders)) {
     if (k === 'content-type') continue
     for (const x of v) w.header(k, x)
